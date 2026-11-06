@@ -1,0 +1,53 @@
+{
+  "declared": "2026-11-05",
+  "note": "Declared before any prompt tuning. Do not edit cases after tuning starts; add new cases with a new id and date instead. Held-out cases are never used while tuning the prompt.",
+  "trials_per_case": "2: the candidate plays once as X (player 1) and once as O (player 2)",
+  "cases": [
+    {
+      "id": "S1-empty",
+      "opening": [],
+      "heldout": false,
+      "why": "Standard start; tests opening play and the full game."
+    },
+    {
+      "id": "S2-midgame",
+      "opening": [
+        "B2",
+        "C3",
+        "C2",
+        "B3",
+        "B2",
+        "C3"
+      ],
+      "heldout": false,
+      "why": "Six central moves already played; tests mid-game reading of a stacked centre."
+    },
+    {
+      "id": "S3-must-block",
+      "opening": [
+        "A1",
+        "A2",
+        "B1",
+        "B2",
+        "C1"
+      ],
+      "heldout": false,
+      "why": "X threatens D1 to complete the bottom row and O is to move: as O the candidate must block at once; as X it must keep the initiative after O blocks. Tests seeing a one-move loss."
+    },
+    {
+      "id": "H1-diagonal",
+      "opening": [
+        "A1",
+        "D4",
+        "B2",
+        "D1",
+        "B2",
+        "C3",
+        "C3",
+        "A4"
+      ],
+      "heldout": true,
+      "why": "HELD OUT. Diagonal pressure across layers; tests 3D lines the prompt was never tuned on."
+    }
+  ]
+}
