@@ -111,7 +111,7 @@ locators point to the rulebook, to [RULES.md](RULES.md), and to the code and tes
 | R12 | No winner after 100 turns → draw | design | Decided 2026-11-08: twists are unlimited, so the game needs an end. `test_turn_limit_draw_R12` |
 | R13 | No legal action → draw | design | Completes the spec for a rare stalemate. `test_no_legal_action_is_a_draw_R13` |
 | R14 | Fully observed; the previous action is visible | design | Needed so players can know which twist R7 bars. `test_both_roles_see_the_same_board...` |
-| E1 | Episode limits: 100 accepted actions, 110 model calls per model player (failed calls count), 60 s per call, 30 min per episode, 2 attempts per turn then a labeled fallback | design | `runner.py` `Limits`; `tests/test_runner.py` |
+| E1 | Episode limits: 15 min clock per player (time in its own calls, retries included) → that player loses (`timeout`); 110 model calls per model player (failed calls count) → that player loses (`call_limit`); 60 s per call (capped at the time left); 2 attempts per turn then a labeled fallback; 100 accepted actions as a backstop with no winner (`step_limit`) | design | RULES.md "Episode limits". Decided 2026-11-08 after review.md (limit endings scored as draws): blame must go to the player who used the time. Replaces the 30 min episode timeout. `runner.py` `Limits`, `run_episode`; `tests/test_runner.py` `test_*_E1` |
 
 ## Sources and reuse terms
 

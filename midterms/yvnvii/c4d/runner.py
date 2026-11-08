@@ -1,9 +1,12 @@
 """Episode runner. Holds the authoritative game and enforces every limit in code:
 
-- step limit (accepted moves)                         -> terminal reason "step_limit"
-- model-call limit per model player (failed calls count) -> terminal reason "call_limit"
-- per-call timeout                                     -> the call counts as failed
-- episode wall-clock timeout                           -> terminal reason "episode_timeout"
+Rule E1 (RULES.md "Episode limits", decided 2026-11-08):
+- per-player clock: thinking time inside that player's choose() calls, retries included
+                                                       -> that player LOSES, reason "timeout"
+  (a move returned after the clock ran out is discarded; model calls are cut at the time left)
+- model-call limit per model player (failed calls count) -> that player LOSES, reason "call_limit"
+- per-call timeout (60 s, or less if the clock has less) -> the call counts as failed
+- step limit (accepted moves), a backstop              -> no winner, reason "step_limit"
 - invalid actions: the model gets `max_attempts_per_turn` tries (with the rejection reason
   as feedback); after that the runner plays a labeled FALLBACK move (first legal shaft in
   centre-first order, else the first legal action). Fallbacks are never counted as model moves.
@@ -24,7 +27,7 @@ class Limits:
     step_limit: int = 100             # backstop; the rules already end the game after 100 turns (R12)
     call_limit: int = 110             # per model player, failed calls included (~50 own turns x 2 attempts + margin)
     call_timeout_s: float = 60.0
-    episode_timeout_s: float = 1800.0
+    clock_s: float = 900.0            # per player, whole episode (E1); blame goes to whoever used the time
     max_attempts_per_turn: int = 2
 
 
@@ -38,6 +41,7 @@ class PlayerStats:
     illegal_attempts: int = 0  # unparseable or rejected actions
     input_tokens: int = 0
     output_tokens: int = 0
+    clock_used_s: float = 0.0  # time inside this player's choose() calls (E1)
     latencies: list = field(default_factory=list)
 
 
@@ -65,6 +69,12 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         if verbose:
             print(json.dumps(ev))
 
+    def lose(p, reason):
+        """E1: a limit ending is a loss for the player who hit it."""
+        log({"type": "limit", "player": p, "reason": reason,
+             "clock_used_s": round(stats[p].clock_used_s, 3)})
+        game.force_end(reason, winner=3 - p)
+
     log({"type": "start", "case": case_id, "seed": seed, "opening": list(opening),
          "players": {p: players[p].name for p in (1, 2)}, "limits": asdict(limits), **(meta or {})})
     steps = 0
@@ -73,9 +83,6 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         if steps >= limits.step_limit:
             game.force_end("step_limit")
             break
-        if time.monotonic() - t_start > limits.episode_timeout_s:
-            game.force_end("episode_timeout")
-            break
         p = game.to_move
         player, st = players[p], stats[p]
         obs = game.observe(p)
@@ -83,9 +90,15 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         history = [a for _, a in game.history]
 
         if not player.is_model:
+            # Baseline/human calls can't be interrupted, so the clock is checked when they return.
             t0 = time.monotonic()
             res = player.choose(obs, legal, history=history)
-            st.latencies.append(time.monotonic() - t0)
+            dt = time.monotonic() - t0
+            st.latencies.append(dt)
+            st.clock_used_s += dt
+            if st.clock_used_s >= limits.clock_s:     # late move is discarded, even a winning one
+                lose(p, "timeout")
+                break
             r = game.step(p, res["action"])
             if not r["ok"]:  # should never happen for scripted baselines; treat as a bug
                 raise RuntimeError(f"{player.name} played illegal move {res['action']}: {r['error']}")
@@ -96,27 +109,43 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
             continue
 
         # ---- model player ----------------------------------------------------
-        feedback, accepted, attempts, out_of_budget = None, False, 0, False
+        feedback, accepted, attempts, forfeit = None, False, 0, None
         while attempts < limits.max_attempts_per_turn:
             if st.calls >= limits.call_limit:
-                out_of_budget = True
+                forfeit = "call_limit"
                 break
+            left = limits.clock_s - st.clock_used_s
+            if left <= 0:
+                forfeit = "timeout"
+                break
+            capped = left < limits.call_timeout_s     # the clock, not the 60 s limit, cuts this call
             st.calls += 1
             attempts += 1
             fb = feedback
+            t0 = time.monotonic()
             try:
                 res = _call_with_timeout(lambda: player.choose(obs, legal, feedback=fb, history=history),
-                                         limits.call_timeout_s)
+                                         min(limits.call_timeout_s, left))
             except cf.TimeoutError:
+                st.clock_used_s += time.monotonic() - t0
                 st.failed_calls += 1
                 log({"type": "call_failed", "player": p, "error": "timeout"})
+                if capped:   # timer granularity can leave a hair of clock; the call was cut because time was up
+                    st.clock_used_s = max(st.clock_used_s, limits.clock_s)
+                    forfeit = "timeout"
+                    break
                 feedback = None
                 continue
             except Exception as e:  # API error, network, quota...
+                st.clock_used_s += time.monotonic() - t0
                 st.failed_calls += 1
                 log({"type": "call_failed", "player": p, "error": f"{type(e).__name__}: {e}"[:300]})
                 feedback = None
                 continue
+            st.clock_used_s += time.monotonic() - t0
+            if st.clock_used_s >= limits.clock_s:     # reply arrived after the clock ran out: discarded
+                forfeit = "timeout"
+                break
             st.input_tokens += res.get("input_tokens", 0) or 0
             st.output_tokens += res.get("output_tokens", 0) or 0
             if "latency_s" in res:
@@ -146,8 +175,8 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
 
         if accepted:
             continue
-        if out_of_budget:
-            game.force_end("call_limit")
+        if forfeit:
+            lose(p, forfeit)
             break
         fb_action = fallback_action(legal)
         r = game.step(p, fb_action)
@@ -161,12 +190,15 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         "case": case_id, "seed": seed, "outcome": out, "steps": steps,
         "wall_s": round(time.monotonic() - t_start, 2),
         "players": {p: {**asdict(stats[p]), "latencies": None,
+                        "clock_used_s": round(stats[p].clock_used_s, 3),
                         "mean_latency_s": (round(sum(stats[p].latencies) / len(stats[p].latencies), 3)
                                            if stats[p].latencies else None)} for p in (1, 2)},
         "final_board": game.render(),
         "winning_line": game.winning_line(),
+        "clock_used_s": {p: round(stats[p].clock_used_s, 3) for p in (1, 2)},
     }
-    log({"type": "end", **{k: result[k] for k in ("outcome", "winning_line", "steps", "wall_s", "players")}})
+    log({"type": "end", **{k: result[k] for k in ("outcome", "winning_line", "steps", "wall_s",
+                                               "clock_used_s", "players")}})
     if trace_path:
         with open(trace_path, "w") as f:
             for ev in events:

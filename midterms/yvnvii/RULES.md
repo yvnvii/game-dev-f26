@@ -90,7 +90,26 @@ is a **draw**. *Decided 2026-11-08: twists are unlimited, so the game needs a gu
 where every twist is barred by R6/R7), the game is a **draw**.
 
 **Scoring:** win = +1, loss = −1, draw = 0. Outcome reasons: `connect_four`, `turn_limit`,
-`no_legal_actions`, plus runner limits (`call_limit`, `episode_timeout`).
+`no_legal_actions`, plus the episode limits below (`timeout`, `call_limit`, `step_limit`).
+
+### Episode limits
+
+**E1. Episode limits** (enforced by the runner, not part of the board game). *Decided 2026-11-08,
+after the independent review, before any Twist Four model run: blame must go to the player who used
+the time.* This replaces the earlier single 30-minute episode timeout, which ended the game with no
+winner whoever was slow.
+- **Clock:** each player has **15 minutes** of thinking time for the whole episode. It counts the time
+  inside that player's own move calls, retries included. If it runs out, that player **loses**
+  (reason `timeout`). A move that arrives after the clock ran out is discarded, even a winning one.
+  A model call is cut off at 60 s or at the time left on the clock, whichever is shorter.
+- **Call limit:** a model player that has used its **110 calls** (failed calls count) **loses**
+  (reason `call_limit`).
+- **Per call:** 60 s. A call that times out counts as a failed call.
+- **Attempts:** 2 per turn. After that the runner plays a labeled fallback move (most central legal
+  drop) for that player.
+- **Step limit:** 100 accepted actions, a backstop behind R12. It ends the game with **no winner**
+  (reason `step_limit`).
+- Human games (`scripts/play.py`) use a clock of a year, so people are never timed out.
 
 ## 5. What each player knows
 

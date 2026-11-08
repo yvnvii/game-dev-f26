@@ -34,6 +34,12 @@ the candidate. I fixed this on 2026-11-08 after the first baseline run showed it
   makes 1–2 calls per move.
 - **Fallback policy:** after 2 rejected or failed attempts in one turn, the runner plays the most central
   legal drop. It is labeled `fallback` in the trace and never counted as a model move.
+- **Limit endings (rule E1):** each player has a 15-minute clock for its own thinking time; a model player
+  also has 110 calls. A player whose clock runs out (`timeout`) or who uses up its calls (`call_limit`)
+  **loses**, and the result counts as a loss for that player and a win for its opponent in W/D/L. Only the
+  `step_limit` backstop ends with no winner. I decided this on 2026-11-08, after the independent review
+  (`review.md`) pointed out that limit endings were scored as draws, and **before any Twist Four model
+  run**. The summary table shows timeout and call-limit endings in their own column.
 
 ## Results
 

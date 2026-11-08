@@ -86,7 +86,7 @@ def main():
     else:
         me = 1 if args.you == "X" else 2
         players = {me: Human(), 3 - me: make(args.opponent, args.seed, args.model, args.history)}
-        limits = Limits(episode_timeout_s=24 * 3600)
+        limits = Limits(clock_s=365 * 24 * 3600.0)   # E1: people are never timed out
     r = run_episode(players, seed=args.seed, limits=limits, trace_path=args.trace)
     print("\n" + r["final_board"])
     o = r["outcome"]
