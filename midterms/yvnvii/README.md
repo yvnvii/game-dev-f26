@@ -54,6 +54,14 @@ python scripts/evaluate.py --candidate model   --opponent minimax --run model-vs
 python scripts/summarize.py > results/TABLE.md
 ```
 
+**Manual check, not in CI: web rules vs Python rules.** `python scripts/crosscheck_web.py --games 300`
+plays random games with `c4d/rules.py`, runs the JavaScript between the `rules` and `computer` markers in
+`web/index.html` with Node (needs `node`; no browser, no npm packages), replays every action with the JS
+`apply()`, and compares board, side to move, turn and result after every step. Run it after any rule change.
+Last run (2026-11-08, seed 0): 300 games, 10,609 steps, 0 rule mismatches. In 2 steps a twist completed two
+lines for the winner and the two versions named different (both valid) lines; the script counts those
+separately.
+
 **Live model setup (Vertex AI):** `gcloud auth application-default login`, then
 `export GOOGLE_CLOUD_PROJECT=<your-project-id>` (optionally `GOOGLE_CLOUD_LOCATION`, default `global`).
 No key is stored in the repository.
@@ -68,7 +76,7 @@ No key is stored in the repository.
 | `c4d/runner.py` | Runs an episode; holds the only game; enforces limits; labels fallbacks; writes traces. |
 | `c4d/players.py` | Random, greedy, and the minimax baseline. They rebuild a private copy of the board from observations. |
 | `c4d/model_player.py` | The Gemini player: prompt in, one action text out. No tools. |
-| `web/index.html` | 3D browser version for people (playtest, recording). Same rules, in JavaScript; cross-checked against the Python rules on 300 random games (10,760 steps, all identical). |
+| `web/index.html` | 3D browser version for people (playtest, recording). Same rules, in JavaScript; cross-checked against `c4d/rules.py` by `scripts/crosscheck_web.py` (see below). |
 
 ## Machine-playable interface (`c4d/engine.py`)
 
@@ -98,25 +106,29 @@ locators point to the rulebook, to [RULES.md](RULES.md), and to the code and tes
 | Rule | Summary | Label | Locator / rationale |
 |---|---|---|---|
 | R1 | 4 × 4 × 4 cube: 16 shafts, 4 layers | design | RULES.md §1. Replaces Connect Four's 7 × 6 grid; 4 is the smallest size that fits four in a row. Reference: Score Four (1967). `rules.py` |
-| R2 | Empty start, X moves first | design | RULES.md §1. Fixed for reproducible evaluation; the suite plays both sides. `test_initial_state_R2` |
+| R2 | Empty start, X moves first | design | Adapts the Hasbro sheet, p. 2, "How to Play" step 1 ("Decide who's going first"). I fixed X first for reproducible evaluation; the suite plays both sides. `test_initial_state_R2` |
 | R3 | Gravity: pieces fall to the bottom of their shaft, also after every twist | design | Extends Connect Four's gravity (manual, Hasbro sheet) to twists. `rules.settle`; `test_gravity_and_piece_counts_hold...` |
-| R4 | Drop into a non-full shaft; the piece lands on top | manual | Hasbro Connect 4 instructions ([PDF](https://instructions.hasbro.com/api/download/01081_en-us_connect-4-game-instructions.pdf)); **TODO: add page/section**. `rules.apply`; `test_drop_lands_on_top_of_its_shaft_R4` |
+| R4 | Drop into a non-full shaft; the piece lands on top | manual + observed | [Hasbro sheet](https://instructions.hasbro.com/api/download/01081_en-us_connect-4-game-instructions.pdf), p. 2, "How to Play" step 2 ("Drop one of your counters down ANY of the slots"). Landing on the lowest empty space is not stated in words; it is how the physical grid behaves. `test_drop_lands_on_top_of_its_shaft_R4` |
 | R5 | Twist one layer or slab 90°, then gravity; exact cell mapping in RULES.md | design | RULES.md §3, decided 2026-11-08. Idea from the Rubik's Cube (Ernő Rubik, 1974). `rules.turn_cell`, `PERM`; worked-example tests |
 | R6 | A twist must change the board | design | Decided 2026-11-08: no passing. `test_no_op_twist_is_illegal_R6` |
 | R7 | No exact undo of the opponent's previous twist | design | Decided 2026-11-08: stops endless back-and-forth. `test_instant_undo_is_illegal_but_repeating_is_legal_R7` |
 | R8 | Illegal actions are rejected and change nothing | design | Lets the runner count illegal attempts and give feedback. `test_full_shaft_malformed_and_out_of_turn...` |
 | R9 | Four in a straight line in any of 76 lines | design | Extends Connect Four's four-in-a-row (manual, Hasbro sheet) to 3D, as Score Four does. `test_cube_has_76_lines...`, `test_space_diagonal_win...` |
-| R10 | A drop that completes your line wins | manual | Hasbro Connect 4 instructions; **TODO: add page/section**. `test_drop_completes_a_line_R10` |
+| R10 | A drop that completes your line wins | manual | Hasbro sheet, p. 2, objective ("4 ... in a row - horizontally, vertically or diagonally") and "How to Play" step 3. `test_drop_completes_a_line_R10` |
 | R11 | After a twist: your line only → you win; both → twister wins; opponent's only → opponent wins | design | Decided 2026-11-08. `test_twist_making_both_lines...`, `test_twist_making_only_the_opponents_line_loses_R11` |
 | R12 | No winner after 100 turns → draw | design | Decided 2026-11-08: twists are unlimited, so the game needs an end. `test_turn_limit_draw_R12` |
 | R13 | No legal action → draw | design | Completes the spec for a rare stalemate. `test_no_legal_action_is_a_draw_R13` |
 | R14 | Fully observed; the previous action is visible | design | Needed so players can know which twist R7 bars. `test_both_roles_see_the_same_board...` |
 | E1 | Episode limits: 15 min clock per player (time in its own calls, retries included) → that player loses (`timeout`); 110 model calls per model player (failed calls count) → that player loses (`call_limit`); 60 s per call (capped at the time left); 2 attempts per turn then a labeled fallback; 100 accepted actions as a backstop with no winner (`step_limit`) | design | RULES.md "Episode limits". Decided 2026-11-08 after review.md (limit endings scored as draws): blame must go to the player who used the time. Replaces the 30 min episode timeout. `runner.py` `Limits`, `run_episode`; `tests/test_runner.py` `test_*_E1` |
 
+`manual + observed` = the rulebook covers the action, and the rest is how the physical game behaves rather than anything the rulebook states in words (R4: the counter lands on the lowest empty space).
+
 ## Sources and reuse terms
 
 - **Connect Four** (Howard Wexler and Ned Strongin; Milton Bradley, 1974; now Hasbro): drop, gravity,
-  four in a row. Only the rules are used; no text, art or trademarked assets are copied.
+  four in a row. Only the rules are used; no text, art or trademarked assets are copied. Rules sheet:
+  [Hasbro PDF](https://instructions.hasbro.com/api/download/01081_en-us_connect-4-game-instructions.pdf)
+  (the file at this link is the UK edition, (c) 2008, code 01081, which is the one cited).
 - **Score Four** (1967; [analog.games entry](https://www.analog.games/gameItem/show/419cd83f96e69db70196e70053f5021a/score-four?lang=EN)):
   four in a row in a 4 × 4 × 4 grid.
 - **Rubik's Cube** (Ernő Rubik, 1974): the idea of turning slices of a cube. No names, logos or artwork

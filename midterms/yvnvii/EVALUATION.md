@@ -11,8 +11,8 @@ while adjusting the model prompt.
 |---|---|---|---|
 | T1-empty | (none) | Full game from the start, including when to twist | X, then O |
 | T2-centre | drop B2, C3, C2, B3, B2, C3 | Mid-game reading, no twists yet | X, then O |
-| T3-twist-win | 13 actions incl. 6 twists (see suite.json) | O can win at once **only by a twist** (`twist col D fwd`) | O, twice |
-| H1-twisted* | 8 actions incl. 6 twists | Held out: a position reached through twists | X, then O |
+| T3-twist-win | 13 actions incl. 5 twists (see suite.json) | O can win at once **only by a twist** (`twist col D fwd`) | O, twice |
+| H1-twisted* | 8 actions incl. 5 twists | Held out: a position reached through twists | X, then O |
 
 T3 always gives the candidate the side to move: as X it would be a forced loss that says nothing about
 the candidate. I fixed this on 2026-11-08 after the first baseline run showed it, before any model run.
@@ -40,6 +40,7 @@ the candidate. I fixed this on 2026-11-08 after the first baseline run showed it
   `step_limit` backstop ends with no winner. I decided this on 2026-11-08, after the independent review
   (`review.md`) pointed out that limit endings were scored as draws, and **before any Twist Four model
   run**. The summary table shows timeout and call-limit endings in their own column.
+- **Retry feedback:** when a reply has no MOVE line, the feedback now names the Twist Four format (`MOVE: <action>`, e.g. `MOVE: drop B3`) instead of the drop-only `MOVE: <shaft>`; fixed 2026-11-08 (review.md), before any Twist Four model run.
 
 ## Results
 

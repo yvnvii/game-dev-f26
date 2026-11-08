@@ -1,5 +1,8 @@
 """Episode limits and model-player handling, using scripted (mocked) model outputs only."""
+import json
 import time
+
+import pytest
 
 from c4d.players import GreedyPlayer, MinimaxPlayer, RandomPlayer, ScriptedPlayer
 from c4d.runner import Limits, run_episode
@@ -196,3 +199,28 @@ def test_fallback_uses_a_legal_drop_and_is_never_a_model_move():
     fb = moves_by(r, "fallback")
     assert len(fb) == 1 and fb[0]["action"] == "drop B2"        # most central drop on an empty board
     assert r["players"][1]["moves"] == 0 and r["players"][1]["fallback_moves"] == 1
+
+
+# ---- a broken non-model player still leaves a trace (review finding 2) -------------------
+class _BrokenBaseline(GreedyPlayer):
+    name = "broken"
+
+    def __init__(self, behaviour):
+        super().__init__(0)
+        self.behaviour = behaviour
+
+    def choose(self, obs, legal, feedback=None, history=None):
+        if self.behaviour == "raise":
+            raise ValueError("search blew up")
+        return {"action": "drop Z9"}
+
+
+@pytest.mark.parametrize("behaviour, exc, text", [("raise", ValueError, "search blew up"),
+                                                  ("illegal", RuntimeError, "drop Z9")])
+def test_non_model_player_failure_logs_error_and_writes_trace_before_reraising(tmp_path, behaviour, exc, text):
+    trace = tmp_path / "t.jsonl"
+    with pytest.raises(exc):
+        run_episode({1: _BrokenBaseline(behaviour), 2: GreedyPlayer(1)}, seed=0, trace_path=str(trace))
+    events = [json.loads(line) for line in trace.read_text().splitlines()]
+    assert events[0]["type"] == "start"
+    assert events[-1]["type"] == "error" and events[-1]["player"] == 1 and text in events[-1]["error"]

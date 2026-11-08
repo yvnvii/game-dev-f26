@@ -4,7 +4,7 @@ Twist Four is Connect Four played inside a 4 × 4 × 4 cube whose slices can be 
 Rubik's Cube. Pieces always fall to the bottom of their shaft, so every twist is followed by gravity.
 
 Rule IDs (R1, R2, …) are the ones the rule/source map in `README.md` points to.
-Rules decided by me are dated; the interactive demo (`web/twist-four.html`) implements this spec.
+Rules decided by me are dated; the interactive demo (`web/index.html`) implements this spec.
 
 ---
 

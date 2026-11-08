@@ -1,0 +1,787 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.319
+           Opus 5.5 · Claude Pro
+ ▘▘   ▝▝   ~/Desktop/game/game-dev-f26/midterms/yvnvii
+
+⚠ Your login expires in 3 days · run /login to renew
+
+❯ Two jobs. Do not commit; I'll review first.                                   
+                                                                                
+  JOB 1. Use the add-rule-with-test skill to update the evidence for rules R2,  
+  R4 and R10 in the rule/source map in README.md. I read the Hasbro Connect 4   
+  rules sheet (UK edition, (c) 2008, code 01081; do NOT add the PDF to the      
+  repo, it is copyrighted; keep the existing link). Replace those three rows'   
+  Label and Locator with exactly this, keeping the table's column layout:       
+                                                                                
+  R2 | design | Adapts the Hasbro sheet, p. 2, "How to Play" step 1 ("Decide    
+  who's going first"). I fixed X first for reproducible evaluation; the suite   
+  plays both sides. test_initial_state_R2                                       
+  R4 | manual + observed | Hasbro sheet, p. 2, "How to Play" step 2 ("Drop one  
+  of your counters down ANY of the slots"). Landing on the lowest empty space   
+  is not stated in words; it is how the physical grid behaves.                  
+  test_drop_lands_on_top_of_its_shaft_R4                                        
+  R10 | manual | Hasbro sheet, p. 2, objective ("4 ... in a row - horizontally, 
+  vertically or diagonally") and "How to Play" step 3.                          
+  test_drop_completes_a_line_R10                                                
+                                                                                
+  These change evidence, not behaviour: for the skill's test step, confirm the  
+  named tests exist and pass. Also add a one-line note under the map explaining 
+  the "manual + observed" label.                                                
+                                                                                
+  JOB 2. Fix these findings from review.md (I accepted them):                   
+  a) Finding 4: twist counts. T3-twist-win and H1-twisted each contain 5        
+  twists. Fix EVALUATION.md and the descriptive "why" text in suite.json. Do    
+  NOT change any case id or opening in suite.json.                              
+  b) Finding 7: RULES.md line 7 names web/twist-four.html; the file is          
+  web/index.html.                                                               
+  c) The runner's feedback when a reply has no MOVE line still shows the        
+  drop-only format. Change it to name the Twist Four format, e.g. "no line of   
+  the form 'MOVE: <action>' was found (example: MOVE: drop B3)". No Twist Four  
+  model run has happened yet; add one line to EVALUATION.md saying this was     
+  fixed before any Twist Four model run.                                        
+  d) Finding 5: add a deterministic test that loads suite.json and, for every   
+  case, replays the opening legally without ending the game; checks that in     
+  T3-twist-win the side to move has exactly one immediate win, "twist col D     
+  fwd"; and checks that in T2-centre and H1-twisted the side to move has no     
+  immediate win.                                                                
+  e) Finding 2: if a player raises or returns an illegal move from a non-model  
+  player, the runner must still log an "error" event and write the trace file   
+  before re-raising. Add a test.                                                
+  f) Low finding (unbackable claim): add scripts/crosscheck_web.py that checks  
+  the JavaScript rules in web/index.html against c4d/rules.py. Generate N       
+  random games with c4d/rules.py, extract the JavaScript between the "/*        
+  ============================ rules" and "/* ============================      
+  computer" markers in web/index.html, run it with Node (node must be           
+  installed; use a temporary .js file, no browser and no npm packages), replay  
+  every action with the JS apply(), and compare the board and result after      
+  every step. Print the number of steps and mismatches. Document it in          
+  README.md as a manual check (not in CI). Then run it with N=300 and report    
+  the result.                                                                   
+                                                                                
+  Run python -m pytest -q at the end and show me the diff.                      
+
+⏺ Skill(add-rule-with-test)
+  ⎿  Successfully loaded skill
+
+⏺ Bash(ls -R | grep -v pycache | head -50 && cat README.md && cat review.md &&
+      sed -n 1,20p RULES.md)
+  ⎿  AGENT-TEAM.md
+     CLAUDE.md
+     EVALUATION.md
+     … +380 lines (ctrl+o to expand)
+
+⏺ Bash(cat EVALUATION.md suite.json c4d/runner.py && cat c4d/rules.py && ls
+      scripts tests && sed -n 1,40p tests/test_runner.py && grep -n "def
+      test_initial_state_R2\|d…)
+  ⎿  # Evaluation
+
+     > Sections marked **(you)** must be written in your own words before s
+     … +611 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(sed -n 1,70p c4d/engine.py; sed -n 1,40p tests/test_engine.py; sed -n
+      25,50p c4d/players.py; cat pytest.ini; ls tests/__pycache__ | head -3)
+  ⎿  """Twist Four engine: the authoritative game behind the five operation
+     s.
+     … +139 lines (ctrl+o to expand)
+
+⏺ Starting with Job 1 (skill steps 1–2; no behaviour change, so steps 3–5 reduce
+  to confirming the named tests exist and pass).
+
+⏺ Bash(python -m pytest -q tests/test_engine.py -k "test_initial_state_R2 or
+      test_drop_lands_on_top_of_its_shaft_R4 or test_drop_completes_a_line_R10"
+      2>&1 | tail -3)
+  ⎿  ...
+        [100%]
+     3 passed, 17 deselected in 0.02s
+
+⏺ Bash(python3 - <<'EOF'
+      import re…)
+  ⎿  diff --git a/midterms/yvnvii/README.md b/midterms/yvnvii/README.md
+     index 39ebd76..2410f2b 100644
+     --- a/midterms/yvnvii/README.md
+     … +64 lines (ctrl+o to expand)
+  ⎿  Updated README.md (+5 -3)
+       98  | Rule | Summary | Label | Locator / rationale |
+       99  |---|---|---|---|
+      100  | R1 | 4 × 4 × 4 cube: 16 shafts, 4 layers | design | RULES.md
+            §1. Replaces Connect Four's 7 × 6 grid; 4 is the smallest siz
+           e that fits four in a row. Reference: Score Four (1967). `rule
+           s.py` |
+      101 -| R2 | Empty start, X moves first | design | RULES.md §1. Fixe
+          -d for reproducible evaluation; the suite plays both sides. `te
+          -st_initial_state_R2` |                                        
+      101 +| R2 | Empty start, X moves first | design | Adapts the Hasbro
+          + sheet, p. 2, "How to Play" step 1 ("Decide who's going first"
+          +). I fixed X first for reproducible evaluation; the suite play
+          +s both sides. `test_initial_state_R2` |                       
+      102  | R3 | Gravity: pieces fall to the bottom of their shaft, also
+            after every twist | design | Extends Connect Four's gravity (
+           manual, Hasbro sheet) to twists. `rules.settle`; `test_gravity
+           _and_piece_counts_hold...` |
+      103 -| R4 | Drop into a non-full shaft; the piece lands on top | ma
+          -nual | Hasbro Connect 4 instructions ([PDF](https://instructio
+          -ns.hasbro.com/api/download/01081_en-us_connect-4-game-instruct
+          -ions.pdf)); **TODO: add page/section**. `rules.apply`; `test_d
+          -rop_lands_on_top_of_its_shaft_R4` |                           
+      103 +| R4 | Drop into a non-full shaft; the piece lands on top | ma
+          +nual + observed | [Hasbro sheet](https://instructions.hasbro.c
+          +om/api/download/01081_en-us_connect-4-game-instructions.pdf), 
+          +p. 2, "How to Play" step 2 ("Drop one of your counters down AN
+          +Y of the slots"). Landing on the lowest empty space is not sta
+          +ted in words; it is how the physical grid behaves. `test_drop_
+          +lands_on_top_of_its_shaft_R4` |                               
+      104  | R5 | Twist one layer or slab 90°, then gravity; exact cell m
+           apping in RULES.md | design | RULES.md §3, decided 2026-11-08.
+            Idea from the Rubik's Cube (Ernő Rubik, 1974). `rules.turn_ce
+           ll`, `PERM`; worked-example tests |
+      105  | R6 | A twist must change the board | design | Decided 2026-1
+           1-08: no passing. `test_no_op_twist_is_illegal_R6` |
+      106  | R7 | No exact undo of the opponent's previous twist | design
+            | Decided 2026-11-08: stops endless back-and-forth. `test_ins
+           tant_undo_is_illegal_but_repeating_is_legal_R7` |
+      107  | R8 | Illegal actions are rejected and change nothing | desig
+           n | Lets the runner count illegal attempts and give feedback. 
+           `test_full_shaft_malformed_and_out_of_turn...` |
+      108  | R9 | Four in a straight line in any of 76 lines | design | E
+           xtends Connect Four's four-in-a-row (manual, Hasbro sheet) to 
+           3D, as Score Four does. `test_cube_has_76_lines...`, `test_spa
+           ce_diagonal_win...` |
+      109 -| R10 | A drop that completes your line wins | manual | Hasbro
+          - Connect 4 instructions; **TODO: add page/section**. `test_dro
+          -p_completes_a_line_R10` |                                     
+      109 +| R10 | A drop that completes your line wins | manual | Hasbro
+          + sheet, p. 2, objective ("4 ... in a row - horizontally, verti
+          +cally or diagonally") and "How to Play" step 3. `test_drop_com
+          +pletes_a_line_R10` |                                          
+      110  | R11 | After a twist: your line only → you win; both → twiste
+           r wins; opponent's only → opponent wins | design | Decided 202
+           6-11-08. `test_twist_making_both_lines...`, `test_twist_making
+           _only_the_opponents_line_loses_R11` |
+      111  | R12 | No winner after 100 turns → draw | design | Decided 20
+           26-11-08: twists are unlimited, so the game needs an end. `tes
+           t_turn_limit_draw_R12` |
+      112  | R13 | No legal action → draw | design | Completes the spec f
+           or a rare stalemate. `test_no_legal_action_is_a_draw_R13` |
+      113  | R14 | Fully observed; the previous action is visible | desig
+           n | Needed so players can know which twist R7 bars. `test_both
+           _roles_see_the_same_board...` |
+      114  | E1 | Episode limits: 15 min clock per player (time in its ow
+           n calls, retries included) → that player loses (`timeout`); 11
+           0 model calls per model player (failed calls count) → that pla
+           yer loses (`call_limit`); 60 s per call (capped at the time le
+           ft); 2 attempts per turn then a labeled fallback; 100 accepted
+            actions as a backstop with no winner (`step_limit`) | design 
+           | RULES.md "Episode limits". Decided 2026-11-08 after review.m
+           d (limit endings scored as draws): blame must go to the player
+            who used the time. Replaces the 30 min episode timeout. `runn
+           er.py` `Limits`, `run_episode`; `tests/test_runner.py` `test_*
+           _E1` |
+      115  
+      116 +`manual + observed` = the rulebook covers the action, and the 
+          +rest is how the physical game behaves rather than anything the
+          + rulebook states in words (R4: the counter lands on the lowest
+          + empty space).                                                
+      117 +                                                              
+      118  ## Sources and reuse terms
+      119  
+      120  - **Connect Four** (Howard Wexler and Ned Strongin; Milton Bra
+           dley, 1974; now Hasbro): drop, gravity,
+
+⏺ Job 1 done. Now Job 2 (a, b, c):
+
+⏺ Bash(python3 - <<'EOF'
+      def sub(p, old, new):…)
+  ⎿  T1-empty 0
+     T2-centre 0
+     T3-twist-win 5
+     H1-twisted 5
+  ⎿  Updated EVALUATION.md (+3 -2)
+      11  |---|---|---|---|
+      12  | T1-empty | (none) | Full game from the start, including when 
+          to twist | X, then O |
+      13  | T2-centre | drop B2, C3, C2, B3, B2, C3 | Mid-game reading, n
+          o twists yet | X, then O |
+      14 -| T3-twist-win | 13 actions incl. 6 twists (see suite.json) | O
+         - can win at once **only by a twist** (`twist col D fwd`) | O, t
+         -wice |                                                         
+      15 -| H1-twisted* | 8 actions incl. 6 twists | Held out: a position
+         - reached through twists | X, then O |                          
+      14 +| T3-twist-win | 13 actions incl. 5 twists (see suite.json) | O
+         + can win at once **only by a twist** (`twist col D fwd`) | O, t
+         +wice |                                                         
+      15 +| H1-twisted* | 8 actions incl. 5 twists | Held out: a position
+         + reached through twists | X, then O |                          
+      16  
+      17  T3 always gives the candidate the side to move: as X it would b
+          e a forced loss that says nothing about
+      18  the candidate. I fixed this on 2026-11-08 after the first basel
+          ine run showed it, before any model run.
+     ...
+      40    `step_limit` backstop ends with no winner. I decided this on 
+          2026-11-08, after the independent review
+      41    (`review.md`) pointed out that limit endings were scored as d
+          raws, and **before any Twist Four model
+      42    run**. The summary table shows timeout and call-limit endings
+           in their own column.
+      43 +- **Retry feedback:** when a reply has no MOVE line, the feedba
+         +ck now names the Twist Four format (`MOVE: <action>`, e.g. `MOV
+         +E: drop B3`) instead of the drop-only `MOVE: <shaft>`; fixed 20
+         +26-11-08 (review.md), before any Twist Four model run.         
+      44  
+      45  ## Results
+      46  
+  ⎿  Updated RULES.md (+1 -1)
+       4  Rubik's Cube. Pieces always fall to the bottom of their shaft, 
+          so every twist is followed by gravity.
+       5  
+       6  Rule IDs (R1, R2, …) are the ones the rule/source map in `READM
+          E.md` points to.
+       7 -Rules decided by me are dated; the interactive demo (`web/twist
+         --four.html`) implements this spec.                             
+       7 +Rules decided by me are dated; the interactive demo (`web/index
+         +.html`) implements this spec.                                  
+       8  
+       9  ---
+      10  
+  ⎿  Updated c4d/runner.py (+1 -1)
+      153              action = res.get("action")
+      154              if action is None:
+      155                  st.illegal_attempts += 1
+      156 -                feedback = "no line of the form 'MOVE: <shaft>
+          -' was found"                                                  
+      156 +                feedback = "no line of the form 'MOVE: <action
+          +>' was found (example: MOVE: drop B3)"                        
+      157                  log({"type": "illegal", "player": p, "reason":
+            feedback, "raw": res.get("raw"),
+      158                       "finish_reason": res.get("finish_reason")
+           })
+      159                  continue
+  ⎿  Updated suite.json (+1 -1)
+      60          "twist col D back"
+      61        ],
+      62        "heldout": true,
+      63 -      "why": "HELD OUT. A position reached through four twists,
+         - X to move, no immediate win for either side."                 
+      63 +      "why": "HELD OUT. A position reached through five twists,
+         + X to move, no immediate win for either side."                 
+      64      }
+      65    ]
+      66  }
+
+⏺ Now (e) the runner error path:
+
+⏺ Bash(grep -rn "MOVE: <" tests c4d scripts; python3 - <<'EOF'
+      def sub(p, old, new):…)
+  ⎿  c4d/runner.py:156:                feedback = "no line of the form 'MOV
+     E: <action>' was found (example: MOVE: drop B3)"
+     c4d/model_player.py:57:                 "MOVE: <one legal action, copi
+     … +14 lines (ctrl+o to expand)
+  ⎿  Updated c4d/runner.py (+21 -7)
+      69          if verbose:
+      70              print(json.dumps(ev))
+      71  
+      72 +    def write_trace():                                         
+      73 +        if trace_path:                                         
+      74 +            with open(trace_path, "w") as f:                   
+      75 +                for ev in events:                              
+      76 +                    f.write(json.dumps(ev) + "\n")             
+      77 +                                                               
+      78 +    def crash(p, msg):                                         
+      79 +        """A non-model player broke (a bug, not a game result):
+         + keep the evidence before re-raising."""                       
+      80 +        log({"type": "error", "player": p, "name": players[p].n
+         +ame, "error": msg[:300]})                                      
+      81 +        write_trace()                                          
+      82 +                                                               
+      83      def lose(p, reason):
+      84          """E1: a limit ending is a loss for the player who hit 
+          it."""
+      85          log({"type": "limit", "player": p, "reason": reason,
+     ...
+      103          if not player.is_model:
+      104              # Baseline/human calls can't be interrupted, so th
+           e clock is checked when they return.
+      105              t0 = time.monotonic()
+       95 -            res = player.choose(obs, legal, history=history)  
+      106 +            try:                                              
+      107 +                res = player.choose(obs, legal, history=histor
+          +y)                                                            
+      108 +            except Exception as e:                            
+      109 +                crash(p, f"{type(e).__name__}: {e}")          
+      110 +                raise                                         
+      111              dt = time.monotonic() - t0
+      112              st.latencies.append(dt)
+      113              st.clock_used_s += dt
+      114              if st.clock_used_s >= limits.clock_s:     # late m
+           ove is discarded, even a winning one
+      115                  lose(p, "timeout")
+      116                  break
+      102 -            r = game.step(p, res["action"])                   
+      117 +            r = game.step(p, res.get("action"))               
+      118              if not r["ok"]:  # should never happen for scripte
+           d baselines; treat as a bug
+      104 -                raise RuntimeError(f"{player.name} played ille
+          -gal move {res['action']}: {r['error']}")                      
+      119 +                msg = f"{player.name} played illegal move {res
+          +.get('action')!r}: {r['error']}"                              
+      120 +                crash(p, msg)                                 
+      121 +                raise RuntimeError(msg)                       
+      122              st.moves += 1
+     … 12 more lines (ctrl+o to expand)
+
+⏺ Now the tests for (d) and (e):
+
+⏺ Bash(cat > tests/test_suite.py <<'EOF'
+      """The declared suite (suite.json) still describes real positions under
+      the current rules (review finding 5)."""…)
+  ⎿  """Episode limits and model-player handling, using scripted (mocked) m
+     odel outputs only."""
+     import time
+     … +6 lines (ctrl+o to expand)
+  ⎿  Updated tests/test_runner.py (+25 -0)
+      196      fb = moves_by(r, "fallback")
+      197      assert len(fb) == 1 and fb[0]["action"] == "drop B2"      
+             # most central drop on an empty board
+      198      assert r["players"][1]["moves"] == 0 and r["players"][1]["
+           fallback_moves"] == 1
+      199 +                                                              
+      200 +                                                              
+      201 +# ---- a broken non-model player still leaves a trace (review 
+          +finding 2) -------------------                                
+      202 +class _BrokenBaseline(GreedyPlayer):                          
+      203 +    name = "broken"                                           
+      204 +                                                              
+      205 +    def __init__(self, behaviour):                            
+      206 +        super().__init__(0)                                   
+      207 +        self.behaviour = behaviour                            
+      208 +                                                              
+      209 +    def choose(self, obs, legal, feedback=None, history=None):
+      210 +        if self.behaviour == "raise":                         
+      211 +            raise ValueError("search blew up")                
+      212 +        return {"action": "drop Z9"}                          
+      213 +                                                              
+      214 +                                                              
+      215 +@pytest.mark.parametrize("behaviour, exc, text", [("raise", Va
+          +lueError, "search blew up"),                                  
+      216 +                                                  ("illegal", 
+          +RuntimeError, "drop Z9")])                                    
+      217 +def test_non_model_player_failure_logs_error_and_writes_trace_
+          +before_reraising(tmp_path, behaviour, exc, text):             
+      218 +    trace = tmp_path / "t.jsonl"                              
+      219 +    with pytest.raises(exc):                                  
+      220 +        run_episode({1: _BrokenBaseline(behaviour), 2: GreedyP
+          +layer(1)}, seed=0, trace_path=str(trace))                     
+      221 +    events = [json.loads(line) for line in trace.read_text().s
+          +plitlines()]                                                  
+      222 +    assert events[0]["type"] == "start"                       
+      223 +    assert events[-1]["type"] == "error" and events[-1]["playe
+          +r"] == 1 and text in events[-1]["error"]                      
+  ⎿  Created tests/test_suite.py (+41 -0)
+       1 +"""The declared suite (suite.json) still describes real positio
+         +ns under the current rules (review finding 5)."""              
+       2 +import json                                                    
+       3 +from pathlib import Path                                       
+       4 +                                                               
+       5 +import pytest                                                  
+       6 +                                                               
+       7 +from c4d import rules                                          
+       8 +from c4d.engine import TwistFour                               
+       9 +                                                               
+      10 +SUITE = json.loads((Path(__file__).resolve().parent.parent / "s
+         +uite.json").read_text())                                       
+      11 +CASES = {c["id"]: c for c in SUITE["cases"]}                   
+      12 +                                                               
+      13 +                                                               
+      14 +def position(case_id):                                         
+      15 +    g = TwistFour()                                            
+      16 +    g.reset(0, CASES[case_id]["opening"])   # raises on an ille
+         +gal opening or one that ends the game                          
+      17 +    return g                                                   
+      18 +                                                               
+      19 +                                                               
+      20 +def immediate_wins(g):                                         
+      21 +    """Action texts that win at once for the side to move (drop
+         +s and twists, R10/R11)."""                                     
+      22 +    p = g.to_move                                              
+      23 +    return [rules.action_text(a) for a, _, res in rules.childre
+         +n(g.state) if res and res["winner"] == p]                      
+      24 +                                                               
+      25 +                                                               
+      26 +@pytest.mark.parametrize("case_id", sorted(CASES))             
+      27 +def test_every_suite_opening_replays_legally_and_leaves_the_gam
+         +e_ongoing(case_id):                                            
+      28 +    g = position(case_id)                                      
+      29 +    assert len(g.history) == len(CASES[case_id]["opening"])    
+      30 +    assert g.outcome()["status"] == "ongoing"                  
+      31 +                                                               
+      32 +                                                               
+      33 +def test_T3_side_to_move_has_exactly_one_immediate_win_and_it_i
+         +s_a_twist():                                                   
+      34 +    g = position("T3-twist-win")                               
+      35 +    assert g.to_move == 2                                  # O,
+         + as suite.json states                                          
+      36 +    assert immediate_wins(g) == ["twist col D fwd"]            
+      37 +                                                               
+      38 +                                                               
+      39 +@pytest.mark.parametrize("case_id", ["T2-centre", "H1-twisted"]
+         +)                                                              
+      40 +def test_side_to_move_has_no_immediate_win(case_id):           
+     … 1 more lines (ctrl+o to expand)
+
+⏺ Bash(sed -i '' 's/^import time$/import json\nimport time\n\nimport pytest/'
+      tests/test_runner.py && head -6 tests/test_runner.py && grep -n "class
+      GreedyPlayer" -A5…)
+  ⎿  """Episode limits and model-player handling, using scripted (mocked) m
+     odel outputs only."""
+     import json
+     … +13 lines (ctrl+o to expand)
+  ⎿  Updated tests/test_runner.py (+3 -0)
+      1  """Episode limits and model-player handling, using scripted (moc
+         ked) model outputs only."""
+      2 +import json                                                     
+      3  import time
+      4  
+      5 +import pytest                                                   
+      6 +                                                                
+      7  from c4d.players import GreedyPlayer, MinimaxPlayer, RandomPlaye
+         r, ScriptedPlayer
+      8  from c4d.runner import Limits, run_episode
+      9  from c4d.model_player import build_prompt, parse_move
+
+⏺ Checking the new runner test fails against the old runner (so it's a real
+  guard):
+
+⏺ Bash(cp c4d/runner.py
+      /private/tmp/claude-501/-Users-yukiogawa-Desktop-game-game-dev-f26-midterm
+      s-yvnvii/4d20a152-1de1-4a4c-b0ef-2fb89dd5e0be/scratchpad/runner.new &…)
+  ⎿  FAILED tests/test_runner.py::test_non_model_player_failure_logs_error_
+     and_writes_trace_before_reraising[raise-ValueError-search blew up]
+     FAILED tests/test_runner.py::test_non_model_player_failure_logs_error_
+     … +3 lines (ctrl+o to expand)
+
+⏺ Both fail on the old runner and pass on the new one. Now (f), the cross-check
+  script:
+
+⏺ Write(scripts/crosscheck_web.py)
+  ⎿  Wrote 120 lines to scripts/crosscheck_web.py
+       1 """Manual check (not in CI): do the JavaScript rules in web/inde
+         x.html agree with c4d/rules.py?
+       2 
+       3 Plays N random games with the Python rules, then replays every a
+         ction with the JavaScript apply()
+       4 from web/index.html (run by Node, no browser, no npm packages) a
+         nd compares the board, side to move,
+       5 turn, last action and result after every step.
+       6 
+       7     python scripts/crosscheck_web.py --games 300 [--seed 0]
+     … +113 lines (ctrl+o to expand)
+
+⏺ Bash(time python scripts/crosscheck_web.py --games 300; echo exit=$?)
+  ⎿  MISMATCH game 89 step 56 (twist layer 2 cw):
+       python: {'board': [1, 1, 2, 1, 2, 1, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1
+     , 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 2, 1, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+     … +19 lines (ctrl+o to expand)
+
+⏺ The two differences both come from twists that completed two lines for the
+  winner, with Python sorting its LINES and JS keeping discovery order.
+  Everything else matches, so I'll keep the check strict but report those two
+  separately after confirming each line is complete for the winner.
+
+⏺ Bash(python3 - <<'EOF'
+      p='scripts/crosscheck_web.py'; s=open(p).read()…)
+  ⎿  games: 300  steps: 10609  rule mismatches: 0  same result, other winni
+     ng line named: 2  endings: {'connect_four': 300}
+     exit=0
+  ⎿  Updated scripts/crosscheck_web.py (+36 -12)
+       2  
+       3  Plays N random games with the Python rules, then replays every 
+          action with the JavaScript apply()
+       4  from web/index.html (run by Node, no browser, no npm packages) 
+          and compares the board, side to move,
+       5 -turn, last action and result after every step.                 
+       5 +turn and result after every step.                              
+       6 +                                                               
+       7 +A step counts as a rule mismatch if anything differs other than
+         + *which* winning line is reported.                             
+       8 +When one action completes several lines for the winner, the two
+         + versions may name different ones                              
+       9 +(Python sorts its line list, JavaScript keeps discovery order);
+         + those steps are counted separately,                           
+      10 +after checking that both named lines really are complete lines 
+         +of the winner on the shared board.                             
+      11  
+      12      python scripts/crosscheck_web.py --games 300 [--seed 0]
+      13  
+     ...
+      103          sys.exit(f"node failed:\n{proc.stderr}")
+      104      js = json.loads(proc.stdout)
+      105  
+      101 -    steps = mismatches = 0                                    
+      102 -    reasons: dict[str, int] = {}                              
+      106 +    steps = mismatches = other_line = 0                       
+      107 +    endings: dict[str, int] = {}                              
+      108      for g, ((actions, expected), got) in enumerate(zip(games, 
+           js)):
+      104 -        if expected:                                          
+      105 -            r = expected[-1]["result"]                        
+      106 -            reasons[r["reason"] if r else "no_legal_actions"] 
+          -= reasons.get(r["reason"] if r else "no_legal_actions", 0) + 1
+      109 +        r = expected[-1]["result"] if expected else None      
+      110 +        end = r["reason"] if r else "no_legal_actions"        
+      111 +        endings[end] = endings.get(end, 0) + 1                
+      112          for n, want in enumerate(expected):
+      113              steps += 1
+      114              have = got[n] if n < len(got) else None
+      110 -            if have != want:                                  
+      111 -                mismatches += 1                               
+      112 -                if mismatches <= 5:                           
+      113 -                    print(f"MISMATCH game {g} step {n + 1} ({r
+          -ules.action_text(actions[n])}):"                              
+      114 -                          f"\n  python: {want}\n  js:     {hav
+          -e}")                                                          
+      115 -    print(f"games: {len(games)}  steps: {steps}  mismatches: {
+          -mismatches}  endings: {reasons}")                             
+      115 +            if have == want:                                  
+      116 +                continue                                      
+      117 +            if same_but_other_line(want, have):               
+      118 +                other_line += 1                               
+     … 26 more lines (ctrl+o to expand)
+
+⏺ Quick check that the script catches a real rule difference (a deliberately
+  broken JS cw, in memory only):
+⏺ Bash(python3 -c "
+      import sys; sys.argv=['x','--games','20']; sys.path.insert(0,'scripts')…)
+  ⎿  games: 20  steps: 615  rule mismatches: 377  same result, other winnin
+     g line named: 0  endings: {'connect_four': 20}
+     exit 1
+     … +8 lines (ctrl+o to expand)
+
+⏺ It catches the broken twist. Now the README documentation:
+
+⏺ Bash(python3 - <<'EOF'
+      def sub(p, old, new):…)
+  ⎿  ...................................................
+        [100%]
+     51 passed in 2.08s
+  ⎿  Updated README.md (+9 -1)
+      54  python scripts/summarize.py > results/TABLE.md
+      55  ```
+      56  
+      57 +**Manual check, not in CI: web rules vs Python rules.** `python
+         + scripts/crosscheck_web.py --games 300`                        
+      58 +plays random games with `c4d/rules.py`, runs the JavaScript bet
+         +ween the `rules` and `computer` markers in                     
+      59 +`web/index.html` with Node (needs `node`; no browser, no npm pa
+         +ckages), replays every action with the JS                      
+      60 +`apply()`, and compares board, side to move, turn and result af
+         +ter every step. Run it after any rule change.                  
+      61 +Last run (2026-11-08, seed 0): 300 games, 10,609 steps, 0 rule 
+         +mismatches. In 2 steps a twist completed two                   
+      62 +lines for the winner and the two versions named different (both
+         + valid) lines; the script counts those                         
+      63 +separately.                                                    
+      64 +                                                               
+      65  **Live model setup (Vertex AI):** `gcloud auth application-defa
+          ult login`, then
+      66  `export GOOGLE_CLOUD_PROJECT=<your-project-id>` (optionally `GO
+          OGLE_CLOUD_LOCATION`, default `global`).
+      67  No key is stored in the repository.
+     ...
+      76  | `c4d/runner.py` | Runs an episode; holds the only game; enfor
+          ces limits; labels fallbacks; writes traces. |
+      77  | `c4d/players.py` | Random, greedy, and the minimax baseline. 
+          They rebuild a private copy of the board from observations. |
+      78  | `c4d/model_player.py` | The Gemini player: prompt in, one act
+          ion text out. No tools. |
+      71 -| `web/index.html` | 3D browser version for people (playtest, r
+         -ecording). Same rules, in JavaScript; cross-checked against the
+         - Python rules on 300 random games (10,760 steps, all identical)
+         -. |                                                            
+      79 +| `web/index.html` | 3D browser version for people (playtest, r
+         +ecording). Same rules, in JavaScript; cross-checked against `c4
+         +d/rules.py` by `scripts/crosscheck_web.py` (see below). |      
+      80  
+      81  ## Machine-playable interface (`c4d/engine.py`)
+      82  
+
+⏺ Bash(git --no-pager diff -- . ':!README.md'; git --no-pager diff README.md |
+      sed -n '1,40p' | grep -A14 "Manual check" ; echo ----; cat
+      tests/test_suite.py | head -0)
+  ⎿  Error: Exit code 1
+     diff --git a/midterms/yvnvii/EVALUATION.md b/midterms/yvnvii/EVALUATION.md
+     index 550d799..88d4a89 100644
+     --- a/midterms/yvnvii/EVALUATION.md
+     +++ b/midterms/yvnvii/EVALUATION.md
+     @@ -11,8 +11,8 @@ while adjusting the model prompt.
+      |---|---|---|---|
+      | T1-empty | (none) | Full game from the start, including when to twist | 
+     X, then O |
+      | T2-centre | drop B2, C3, C2, B3, B2, C3 | Mid-game reading, no twists 
+     yet | X, then O |
+     -| T3-twist-win | 13 actions incl. 6 twists (see suite.json) | O can win at
+     once **only by a twist** (`twist col D fwd`) | O, twice |
+     … +169 lines (ctrl+o to expand)
+
+⏺ Both jobs are done and nothing is committed. python -m pytest -q now gives 51 
+  passed: 41 before, plus 10 new.
+
+  Job 1: rule/source map (add-rule-with-test skill)
+
+  - R2, R4, R10: I replaced the Label and Locator with your text. Two small
+    formatting deviations from "exactly":
+    - In R4, "Hasbro sheet" is now the link to the existing PDF, so the link
+      stays without changing the wording.
+    - The test names are in backticks to match the other rows.
+  - Tests: the three named tests exist and pass (tests/test_engine.py:37, :93,
+    :134). No rule behaviour changed, so RULES.md, rules.py, web/index.html and
+    the prompt are unchanged.
+  - Note under the map: "manual + observed = the rulebook covers the action, and
+    the rest is how the physical game behaves rather than anything the rulebook
+    states in words (R4: the counter lands on the lowest empty space)."
+  - Possible mismatch: the existing link is the en-us 01081 PDF, but you read
+    the UK © 2008 edition. You may want to check the page numbers match, or name
+    the edition in the sources section.
+
+  Job 2
+
+  - a) Twist counts: EVALUATION.md now says 5 twists for T3 and for H1. In
+    suite.json, only H1's why text changed ("four" → "five"). T3's why text has
+    no count, and no ids or openings changed. The twist counts are now 0/0/5/5.
+  - b) File name: RULES.md:7 now says web/twist-four.html → web/index.html.
+  - c) Feedback: runner.py now says "no line of the form 'MOVE: <action>' was 
+    found (example: MOVE: drop B3)". I added a "Retry feedback" line to
+    EVALUATION.md saying it was fixed before any Twist Four model run.
+  - d) Suite test: new tests/test_suite.py, all passing:
+    - Every case's opening replays legally and the game is still ongoing (4
+      cases).
+    - In T3, O is to move and its only immediate win is ["twist col D fwd"].
+    - T2 and H1 have no immediate win.
+  - e) Runner: when a non-model player raises or returns an illegal move, the
+    runner now logs an {"type":"error", ...} event and writes the trace before
+    re-raising. The new test covers both cases, and I confirmed it fails on the 
+    old runner and passes on the new one.
+  - f) Cross-check: scripts/crosscheck_web.py --games 300 gives 300 games, 
+    10,609 steps, 0 rule mismatches. It takes about 2 s.
+    - Not strict equality: in 2 steps the results differed. In each, a twist
+      completed two lines for the winner, and Python and JS reported different
+      ones, because Python sorts its line list and JS doesn't. Board, side to
+      move, turn, winner and reason were identical. The script counts these
+      separately, after checking that both reported lines really are complete
+      lines for the winner.
+    - It catches real errors: with a deliberately wrong JS cw twist (in memory
+      only), it reported 377 mismatches in 20 games.
+    - README: I documented it as a manual check, not in CI. I also removed the
+      old unbacked figure ("10,760 steps, all identical") and pointed to the
+      script instead.
+    - Optional fix: sorting LINES in the JS would make the two versions report
+      the same line. I didn't do it because it changes web/index.html.
+
+  Diff (summary; the README rows and note are shown above)
+
+  --- EVALUATION.md
+  -| T3-twist-win | 13 actions incl. 6 twists ...
+  -| H1-twisted* | 8 actions incl. 6 twists |
+  +| T3-twist-win | 13 actions incl. 5 twists ...
+  +| H1-twisted* | 8 actions incl. 5 twists |
+  +- **Retry feedback:** ... names the Twist Four format (`MOVE: <action>`, e.g.
+  `MOVE: drop B3`) instead of the
+  +  drop-only `MOVE: <shaft>`; fixed 2026-11-08 (review.md), before any Twist 
+  Four model run.
+  --- RULES.md
+  -... the interactive demo (`web/twist-four.html`) ...
+  +... the interactive demo (`web/index.html`) ...
+  --- suite.json (H1 "why" only)
+  -A position reached through four twists, ...
+  +A position reached through five twists, ...
+  --- c4d/runner.py
+  +    def write_trace(): ...                      # extracted; also used at the
+  normal end
+  +    def crash(p, msg):                          # log {"type": "error", ...},
+  then write_trace()
+  -            res = player.choose(obs, legal, history=history)
+  +            try: res = player.choose(...)
+  +            except Exception as e: crash(p, f"{type(e).__name__}: {e}"); 
+  raise
+  -                raise RuntimeError(f"... {res['action']}: ...")
+  +                msg = f"{player.name} played illegal move 
+  {res.get('action')!r}: {r['error']}"
+  +                crash(p, msg); raise RuntimeError(msg)
+  -                feedback = "no line of the form 'MOVE: <shaft>' was found"
+  +                feedback = "no line of the form 'MOVE: <action>' was found 
+  (example: MOVE: drop B3)"
+  --- README.md
+  + R2 / R4 / R10 rows as specified; `manual + observed` note under the map
+  + "Manual check, not in CI" paragraph for crosscheck_web.py (with the last-run
+  numbers)
+  ~ code map: web/index.html row now points to the script
+  +++ tests/test_runner.py   new: 
+  test_non_model_player_failure_logs_error_and_writes_trace_before_reraising (2 
+  cases)
+  +++ tests/test_suite.py    new file (7 tests)
+  +++ scripts/crosscheck_web.py  new file
+
+  Run git diff to see every line.
+
+✻ Worked for 2m 34s · done 6:54 PM
+
+❯ Same document: the en-us link serves the UK 2008 edition, which is the one I  
+  read. In the Sources section, add after the Hasbro link: "(the file at this   
+  link is the UK edition, (c) 2008, code 01081, which is the one cited)". Leave 
+  the JS line ordering as it is. Then run pytest once more.                     
+
+⏺ Bash(grep -n "hasbro\|Hasbro" README.md; sed -n '/## Sources/,/Score Four/p'
+      README.md)
+  ⎿  109:| R2 | Empty start, X moves first | design | Adapts the Hasbro she
+     et, p. 2, "How to Play" step 1 ("Decide who's going first"). I fixed X
+      first for reproducible evaluation; the suite plays both sides. `test_
+     … +22 lines (ctrl+o to expand)
+
+⏺ The Sources section has no Hasbro link yet; the only one is in the R4 row of
+  the map. So I'll add the same link to the Connect Four bullet in Sources,
+  followed by your sentence:
+
+⏺ Update(README.md)
+  ⎿  Added 3 lines, removed 1 line
+      126  ## Sources and reuse terms
+      127  
+      128  - **Connect Four** (Howard Wexler and Ned Strongin; Milton Bra
+           dley, 1974; now Hasbro): drop, gravity,
+      129 -  four in a row. Only the rules are used; no text, art or trad
+          -emarked assets are copied.                                    
+      129 +  four in a row. Only the rules are used; no text, art or trad
+          +emarked assets are copied. Rules sheet:                       
+      130 +  [Hasbro PDF](https://instructions.hasbro.com/api/download/01
+          +081_en-us_connect-4-game-instructions.pdf)                    
+      131 +  (the file at this link is the UK edition, (c) 2008, code 010
+          +81, which is the one cited).                                  
+      132  - **Score Four** (1967; [analog.games entry](https://www.analo
+           g.games/gameItem/show/419cd83f96e69db70196e70053f5021a/score-f
+           our?lang=EN)):
+      133    four in a row in a 4 × 4 × 4 grid.
+      134  - **Rubik's Cube** (Ernő Rubik, 1974): the idea of turning sli
+           ces of a cube. No names, logos or artwork
+
+⏺ Bash(python -m pytest -q 2>&1 | tail -2)
+  ⎿  ...................................................
+        [100%]
+     51 passed in 2.01s
+
+⏺ I added the edition note to the Connect Four bullet in the Sources section,
+  and python -m pytest -q still gives 51 passed.
+
+  That bullet had no Hasbro link, since the only one was in the R4 row of the
+  rule map. So I added the same PDF link there, and your sentence follows it
+  word for word:
+
+     four in a row. Only the rules are used; no text, art or trademarked assets
+  are copied.
+  +  Rules sheet:
+  +  [Hasbro PDF](https://instructions.hasbro.com/api/download/01081_en-us_conne
+  ct-4-game-instructions.pdf)
+  +  (the file at this link is the UK edition, (c) 2008, code 01081, which is 
+  the one cited).
+
+  The JavaScript winning-line order is unchanged. Nothing is committed.
+
+✻ Churned for 15s · done 6:55 PM

@@ -69,6 +69,17 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         if verbose:
             print(json.dumps(ev))
 
+    def write_trace():
+        if trace_path:
+            with open(trace_path, "w") as f:
+                for ev in events:
+                    f.write(json.dumps(ev) + "\n")
+
+    def crash(p, msg):
+        """A non-model player broke (a bug, not a game result): keep the evidence before re-raising."""
+        log({"type": "error", "player": p, "name": players[p].name, "error": msg[:300]})
+        write_trace()
+
     def lose(p, reason):
         """E1: a limit ending is a loss for the player who hit it."""
         log({"type": "limit", "player": p, "reason": reason,
@@ -92,16 +103,22 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         if not player.is_model:
             # Baseline/human calls can't be interrupted, so the clock is checked when they return.
             t0 = time.monotonic()
-            res = player.choose(obs, legal, history=history)
+            try:
+                res = player.choose(obs, legal, history=history)
+            except Exception as e:
+                crash(p, f"{type(e).__name__}: {e}")
+                raise
             dt = time.monotonic() - t0
             st.latencies.append(dt)
             st.clock_used_s += dt
             if st.clock_used_s >= limits.clock_s:     # late move is discarded, even a winning one
                 lose(p, "timeout")
                 break
-            r = game.step(p, res["action"])
+            r = game.step(p, res.get("action"))
             if not r["ok"]:  # should never happen for scripted baselines; treat as a bug
-                raise RuntimeError(f"{player.name} played illegal move {res['action']}: {r['error']}")
+                msg = f"{player.name} played illegal move {res.get('action')!r}: {r['error']}"
+                crash(p, msg)
+                raise RuntimeError(msg)
             st.moves += 1
             steps += 1
             log({"type": "move", "n": steps, "player": p, "source": "baseline", "action": r["action"],
@@ -153,7 +170,7 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
             action = res.get("action")
             if action is None:
                 st.illegal_attempts += 1
-                feedback = "no line of the form 'MOVE: <shaft>' was found"
+                feedback = "no line of the form 'MOVE: <action>' was found (example: MOVE: drop B3)"
                 log({"type": "illegal", "player": p, "reason": feedback, "raw": res.get("raw"),
                      "finish_reason": res.get("finish_reason")})
                 continue
@@ -199,9 +216,6 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
     }
     log({"type": "end", **{k: result[k] for k in ("outcome", "winning_line", "steps", "wall_s",
                                                "clock_used_s", "players")}})
-    if trace_path:
-        with open(trace_path, "w") as f:
-            for ev in events:
-                f.write(json.dumps(ev) + "\n")
+    write_trace()
     result["events"] = events
     return result
