@@ -1,6 +1,7 @@
-"""Play in the terminal, or watch two agents play.
+"""Play Twist Four in the terminal, or watch two agents play.
+(For the 3D version with drag-to-twist, open web/index.html in a browser.)
 
-Run from midterms/<github-login>/:
+Run from midterms/yvnvii/:
   python scripts/play.py                          # you (X) vs minimax baseline
   python scripts/play.py --you O --opponent greedy
   python scripts/play.py --watch model minimax    # watch: model (X) vs minimax (O), no human input
@@ -13,7 +14,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from c4d.engine import Connect3D  # noqa: E402
 from c4d.players import GreedyPlayer, MinimaxPlayer, RandomPlayer  # noqa: E402
 from c4d.runner import Limits, run_episode  # noqa: E402
 from c4d.players import Player  # noqa: E402
@@ -32,15 +32,22 @@ class Human(Player):
 
     def choose(self, obs, legal, feedback=None, history=None):
         print("\n" + obs["board_text"])
-        if obs["last_move"]:
-            print(f"Opponent played {obs['last_move']}.")
+        if obs["last_action"]:
+            print(f"{obs['last_action_by']} played: {obs['last_action']}")
+        print(f"Turn {obs['turn']} of {obs['turn_limit']}.")
         while True:
-            a = input(f"You are {obs['your_symbol']}. Your move (A1..D4, q to quit): ").strip().upper()
-            if a == "Q":
+            a = input(f"You are {obs['your_symbol']}. Your action (e.g. B3, twist layer 2 cw; ? lists all; q quits): ").strip()
+            if a.lower() == "q":
                 sys.exit(0)
-            if a in legal:
-                return {"action": a}
-            print(f"  '{a}' is not legal. Legal: {', '.join(legal)}")
+            if a == "?":
+                print("  Legal: " + ", ".join(legal))
+                continue
+            if len(a) == 2:                       # shortcut: "B3" means "drop B3"
+                a = "drop " + a
+            match = [x for x in legal if x.lower() == " ".join(a.lower().split())]
+            if match:
+                return {"action": match[0]}
+            print(f"  '{a}' is not legal right now. Type ? to list legal actions.")
 
 
 class Watched(Player):

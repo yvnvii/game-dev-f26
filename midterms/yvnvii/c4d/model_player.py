@@ -10,35 +10,60 @@ import time
 
 from .players import Player
 
-RULES = """You are playing 3D Connect Four on a 4x4x4 cube.
-- The cube has 16 vertical shafts named A1..D4 (letter = column A-D, digit = row 1-4).
-- On your turn you drop one piece into a shaft that is not full; it falls to the lowest empty layer.
-- Layer z=1 is the bottom, z=4 the top.
-- You win by making 4 of your pieces in a straight line in any direction: along a row, a column,
-  a vertical shaft, or any diagonal, including diagonals that cross all four layers.
-- If all 64 cells fill with no line, the game is a draw."""
+RULES = """You are playing Twist Four: Connect Four inside a 4x4x4 cube whose slices can turn like a Rubik's Cube.
 
-MOVE_RE = re.compile(r"MOVE:\s*([A-Da-d][1-4])")
+The cube
+- Columns A-D run left to right, rows 1-4 run front to back (row 1 is nearest you), layers L1-L4 run
+  bottom to top. A shaft is a vertical stack of 4 cells, named like B3.
+- Gravity: pieces always rest at the bottom of their shaft. No piece ever floats.
+
+On your turn, take exactly ONE action:
+1. Drop: put your piece in a shaft that is not full; it falls to the lowest empty cell.
+   Text: "drop B3"
+2. Twist: turn one slice of 16 cells by 90 degrees; the pieces in it move with it. Then gravity pulls
+   every piece in the cube down its shaft.
+   - "twist layer K cw" / "twist layer K ccw": turn layer K (1-4) clockwise / counter-clockwise, seen from above.
+   - "twist col C fwd" / "twist col C back": turn the vertical slab of column C (A-D) so its top rolls
+     toward row 1 / toward row 4.
+   - "twist row R left" / "twist row R right": turn the vertical slab of row R (1-4) so its top rolls
+     toward column A / toward column D.
+   A twist must change the board, and you may not exactly undo the twist your opponent just made.
+
+Winning
+- Four of your pieces in a straight line wins: along a row, a column, a shaft, or any diagonal,
+  including diagonals through all four layers (76 lines in total).
+- After a twist: if it makes a line for both players, the player who twisted wins; if it makes a line
+  only for the opponent, the opponent wins.
+- No winner after 100 turns (drops and twists both count): draw."""
+
+MOVE_RE = re.compile(r"MOVE:[ \t]*([^\n]+)", re.IGNORECASE)
 
 
 def build_prompt(obs: dict, legal: list[str], history: list[str] | None, feedback: str | None) -> str:
-    parts = [RULES, "", f"You are {obs['your_symbol']} (player {obs['you_are']}). Opponent pieces are "
-             f"{'O' if obs['your_symbol'] == 'X' else 'X'}. Empty cells are '.'.",
-             f"Move number: {obs['move_number']}", "", "Current board:", obs["board_text"], ""]
+    me, opp = obs["your_symbol"], ("O" if obs["your_symbol"] == "X" else "X")
+    parts = [RULES, "",
+             f"You are {me}. Your opponent is {opp}. Empty cells are '.'.",
+             f"Turn {obs['turn']} of {obs['turn_limit']}.",
+             "Last action: " + (f"{obs['last_action_by']} played \"{obs['last_action']}\"" if obs["last_action"] else "none (first turn)"),
+             "", "Current board (each layer seen from above; row 1 is at the bottom of each grid):",
+             obs["board_text"], ""]
     if history is not None:
-        parts.append("Moves so far (oldest first): " + (", ".join(history) if history else "none"))
+        parts.append("Actions so far (oldest first, X moved first): " + (", ".join(history) if history else "none"))
         parts.append("")
-    parts.append("Legal moves: " + ", ".join(legal))
+    parts.append("Legal actions: " + ", ".join(legal))
     if feedback:
         parts.append(f"\nYour previous reply was rejected: {feedback}")
-    parts.append("\nThink briefly, then end your reply with exactly one line of the form  MOVE: <shaft>"
-                 "  for example  MOVE: B3")
+    parts.append("\nThink briefly, then end your reply with exactly one line of the form\n"
+                 "MOVE: <one legal action, copied exactly>\nfor example\nMOVE: drop B3")
     return "\n".join(parts)
 
 
 def parse_move(text: str) -> str | None:
+    """The text after the last 'MOVE:' on its line, or None. The engine validates it."""
     found = MOVE_RE.findall(text or "")
-    return found[-1].upper() if found else None
+    if not found:
+        return None
+    return found[-1].strip(" \t`*'\".") or None
 
 
 class ModelPlayer(Player):
@@ -85,10 +110,9 @@ class ModelPlayer(Player):
         latency = time.monotonic() - t0
         text = resp.text or ""
         um = getattr(resp, "usage_metadata", None)
-        # Lets traces distinguish a truncated reply (MAX_TOKENS) from one that just omitted MOVE.
         cands = getattr(resp, "candidates", None) or []
-        fr = getattr(cands[0], "finish_reason", None) if cands else None
-        finish_reason = getattr(fr, "name", None) or (str(fr) if fr is not None else None)
+        finish = getattr(cands[0], "finish_reason", None) if cands else None
+        finish = getattr(finish, "name", None) or (str(finish) if finish is not None else None)
         return {
             "action": parse_move(text),
             "raw": text[-600:],
@@ -97,5 +121,5 @@ class ModelPlayer(Player):
             "output_tokens": (getattr(um, "candidates_token_count", 0) or 0)
                              + (getattr(um, "thoughts_token_count", 0) or 0),
             "model_version": getattr(resp, "model_version", None),
-            "finish_reason": finish_reason,
+            "finish_reason": finish,   # "MAX_TOKENS" means the reply was cut off by the output limit
         }

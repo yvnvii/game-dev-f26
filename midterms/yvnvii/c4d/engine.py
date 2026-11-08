@@ -1,151 +1,123 @@
-"""3D gravity Connect Four on a 4x4x4 cube.
+"""Twist Four engine: the authoritative game behind the five operations.
 
-The engine holds the authoritative state and exposes the five operations:
-reset(seed), observe(player_id), legal_actions(player_id), step(player_id, action), outcome().
+    reset(seed, opening) -> observation of the player to move
+    observe(player_id)   -> what that player may know (everything: the game is fully observed, R14)
+    legal_actions(pid)   -> canonical action texts, fixed order, [] when it is not pid's turn
+    step(pid, action)    -> validated transition; an illegal action changes nothing (R8)
+    outcome()            -> ongoing, or terminal with reason, winner and score
 
-Coordinates: board[x][y][z], x = column letter A-D, y = row 1-4, z = height 0 (bottom) to 3 (top).
-An action "B3" drops the mover's piece into the vertical shaft at x=B, y=3; it falls to the
-lowest empty height (gravity, as in Connect Four / Score Four).
+Rules live in c4d/rules.py and are specified in RULES.md.
 """
 from __future__ import annotations
 
-import itertools
+from . import rules
+from .rules import COLS, SIZE, TURN_LIMIT, action_text, parse_action
 
-SIZE = 4
-PLAYERS = (1, 2)
 SYMBOL = {0: ".", 1: "X", 2: "O"}
-COLS = "ABCD"
+ALL_ACTIONS = [action_text(a) for a in rules.ALL_ACTIONS]
 
 
-def action_name(x: int, y: int) -> str:
-    return f"{COLS[x]}{y + 1}"
-
-
-def parse_action(action: str) -> tuple[int, int] | None:
-    """Return (x, y) for a well-formed action string like 'B3', else None."""
-    if not isinstance(action, str):
-        return None
-    a = action.strip().upper()
-    if len(a) != 2 or a[0] not in COLS or a[1] not in "1234":
-        return None
-    return COLS.index(a[0]), int(a[1]) - 1
-
-
-ALL_ACTIONS = [action_name(x, y) for y in range(SIZE) for x in range(SIZE)]
-
-
-def _winning_lines() -> list[tuple[tuple[int, int, int], ...]]:
-    """All straight lines of 4 cells inside the cube (76 for a 4x4x4 cube)."""
-    lines = set()
-    dirs = [d for d in itertools.product((-1, 0, 1), repeat=3) if d != (0, 0, 0)]
-    for x, y, z in itertools.product(range(SIZE), repeat=3):
-        for dx, dy, dz in dirs:
-            cells = [(x + i * dx, y + i * dy, z + i * dz) for i in range(SIZE)]
-            if all(0 <= c < SIZE for cell in cells for c in cell):
-                lines.add(tuple(sorted(cells)))
-    return sorted(lines)
-
-
-LINES = _winning_lines()
-LINES_THROUGH = {
-    cell: [ln for ln in LINES if cell in ln]
-    for cell in itertools.product(range(SIZE), repeat=3)
-}
-
-
-class Connect3D:
-    """Authoritative game state. Players never receive this object, only observe() output."""
+class TwistFour:
+    """Players never receive this object, only observe() output."""
 
     def __init__(self) -> None:
         self.reset(0)
 
     # ---- operation 1 -------------------------------------------------------
-    def reset(self, seed: int = 0, opening: list[str] | tuple[str, ...] = ()) -> dict:
-        """Start an episode. The rules are deterministic; `seed` is recorded for the
-        trace and used by randomized players. `opening` replays a fixed list of moves
-        to create a declared starting situation."""
+    def reset(self, seed: int = 0, opening=()) -> dict:
+        """Start an episode. The rules are deterministic; `seed` is recorded for the trace and
+        used by randomized players. `opening` replays fixed action texts to build a suite position."""
         self.seed = seed
-        self.board = [[[0] * SIZE for _ in range(SIZE)] for _ in range(SIZE)]
-        self.to_move = 1
+        self.state = rules.INITIAL
         self.history: list[tuple[int, str]] = []
         self._terminal: dict | None = None
         for a in opening:
             r = self.step(self.to_move, a)
             if not r["ok"]:
-                raise ValueError(f"illegal opening move {a!r}: {r['error']}")
+                raise ValueError(f"illegal opening action {a!r}: {r['error']}")
             if self._terminal:
                 raise ValueError("opening ends the game; choose a shorter opening")
         return self.observe(self.to_move)
 
     # ---- helpers -----------------------------------------------------------
+    @property
+    def to_move(self) -> int:
+        return self.state.to_move
+
+    @property
+    def turn(self) -> int:
+        return self.state.turn
+
+    @property
+    def board(self) -> list:
+        """Nested copy board[x][y][z]."""
+        b = self.state.board
+        return [[[b[rules.idx(x, y, z)] for z in range(SIZE)] for y in range(SIZE)] for x in range(SIZE)]
+
     def height(self, x: int, y: int) -> int:
-        """Number of pieces in shaft (x, y) == index of the next free z."""
-        col = self.board[x][y]
-        h = 0
-        while h < SIZE and col[h] != 0:
-            h += 1
-        return h
+        return rules.height(self.state.board, x, y)
 
     def render(self) -> str:
-        """Four horizontal layers side by side, bottom layer first."""
-        rows = ["      " + "        ".join("A B C D" for _ in range(SIZE))]
+        """Four horizontal layers side by side, bottom layer first; row 1 is printed last (nearest you)."""
+        b = self.state.board
+        lines = ["      " + "".join(f"layer L{z + 1}".ljust(15) for z in range(SIZE)) + "  (L1 is the bottom)",
+                 "      " + "        ".join("A B C D" for _ in range(SIZE))]
         for y in range(SIZE - 1, -1, -1):
-            parts = []
-            for z in range(SIZE):
-                parts.append(" ".join(SYMBOL[self.board[x][y][z]] for x in range(SIZE)))
-            rows.append(f"  {y + 1}   " + "        ".join(parts))
-        title = "      " + "".join(f"layer z={z + 1}".ljust(15) for z in range(SIZE))
-        return title + "  (z=1 is the bottom)\n" + "\n".join(rows)
+            parts = [" ".join(SYMBOL[b[rules.idx(x, y, z)]] for x in range(SIZE)) for z in range(SIZE)]
+            lines.append(f"  {y + 1}   " + "        ".join(parts))
+        return "\n".join(lines)
 
     # ---- operation 2 -------------------------------------------------------
     def observe(self, player_id: int) -> dict:
-        """Connect Four is fully observed: both players may see the whole board.
-        The observation is a fresh copy, never a handle to the authoritative state."""
+        """Fully observed (R14): both players may see everything. Always a fresh copy."""
+        last = self.history[-1][1] if self.history else None
         return {
             "you_are": player_id,
             "your_symbol": SYMBOL[player_id],
             "to_move": self.to_move if self._terminal is None else None,
+            "turn": self.turn,
+            "turn_limit": TURN_LIMIT,
             "move_number": len(self.history) + 1,
             "board_text": self.render(),
-            "board": [[list(col) for col in plane] for plane in self.board],
-            "last_move": self.history[-1][1] if self.history else None,
+            "board": self.board,
+            "last_action": last,
+            "last_action_by": SYMBOL[self.history[-1][0]] if self.history else None,
             "status": self.outcome()["status"],
         }
 
     # ---- operation 3 -------------------------------------------------------
     def legal_actions(self, player_id: int) -> list[str]:
-        """Non-full shafts, only for the player to move. No ranking, no hints."""
+        """Legal action texts in the fixed order of ALL_ACTIONS (drops A1..D4, then twists).
+        No ranking or hints; everything here follows from the visible board and last action."""
         if self._terminal is not None or player_id != self.to_move:
             return []
-        return [a for a in ALL_ACTIONS if self.height(*parse_action(a)) < SIZE]
+        return [action_text(a) for a in rules.legal(self.state)]
 
     # ---- operation 4 -------------------------------------------------------
-    def step(self, player_id: int, action: str) -> dict:
-        """Validate and apply one move. Invalid moves change nothing."""
+    def step(self, player_id: int, action) -> dict:
         if self._terminal is not None:
             return {"ok": False, "error": "game is over"}
         if player_id != self.to_move:
             return {"ok": False, "error": f"not your turn (player {self.to_move} to move)"}
-        xy = parse_action(action)
-        if xy is None:
-            return {"ok": False, "error": f"unrecognized action {action!r}; use a column like A1..D4"}
-        x, y = xy
-        z = self.height(x, y)
-        if z >= SIZE:
-            return {"ok": False, "error": f"shaft {action_name(x, y)} is full"}
-        self.board[x][y][z] = player_id
-        name = action_name(x, y)
-        self.history.append((player_id, name))
-        if self._completes_line((x, y, z), player_id):
-            self._terminal = {"reason": "connect_four", "winner": player_id}
-        elif len(self.history) == SIZE ** 3:
-            self._terminal = {"reason": "board_full", "winner": None}
-        else:
-            self.to_move = 3 - player_id
-        return {"ok": True, "placed": [x, y, z], "action": name, "outcome": self.outcome()}
-
-    def _completes_line(self, cell, p) -> bool:
-        return any(all(self.board[a][b][c] == p for a, b, c in ln) for ln in LINES_THROUGH[cell])
+        a = parse_action(action)
+        if a is None:
+            return {"ok": False, "error": f"unrecognized action {action!r}; use e.g. 'drop B3', "
+                                          f"'twist layer 2 cw', 'twist col B fwd', 'twist row 3 left'"}
+        why = rules.why_illegal(self.state, a)
+        if why:
+            return {"ok": False, "error": why}
+        placed = None
+        if a[0] == "drop":
+            placed = [a[1], a[2], rules.height(self.state.board, a[1], a[2])]
+        nxt, result = rules.apply(self.state, a)
+        self.state = nxt
+        text = action_text(a)
+        self.history.append((player_id, text))
+        if result:
+            self._terminal = {"reason": result["reason"], "winner": result["winner"], "line": result["line"]}
+        elif not rules.legal(self.state):                                     # R13
+            self._terminal = {"reason": "no_legal_actions", "winner": None, "line": None}
+        return {"ok": True, "action": text, "placed": placed, "outcome": self.outcome()}
 
     # ---- operation 5 -------------------------------------------------------
     def outcome(self) -> dict:
@@ -155,7 +127,16 @@ class Connect3D:
         score = {1: 0, 2: 0} if w is None else {w: 1, 3 - w: -1}
         return {"status": "terminal", "reason": self._terminal["reason"], "winner": w, "score": score}
 
+    def winning_line(self):
+        """Cells of the winning line as names like 'B2 L1', or None."""
+        if not self._terminal or not self._terminal.get("line"):
+            return None
+        return [f"{COLS[x]}{y + 1} L{z + 1}" for x, y, z in map(rules.xyz, self._terminal["line"])]
+
     def force_end(self, reason: str, winner: int | None = None) -> None:
-        """Used only by the runner to end an episode for a limit (step/call/timeout/invalid)."""
+        """Used only by the runner to end an episode for a limit (step/call/timeout)."""
         if self._terminal is None:
-            self._terminal = {"reason": reason, "winner": winner}
+            self._terminal = {"reason": reason, "winner": winner, "line": None}
+
+
+Connect3D = TwistFour   # earlier name, kept so old imports keep working

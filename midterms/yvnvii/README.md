@@ -1,25 +1,28 @@
-# Tilt Four: 3D gravity Connect Four (midterm)
+# Twist Four (midterm, yvnvii)
 
-> **TODO before submitting:** replace every `yvnvii` with your lowercase GitHub login, add the
-> recording link, and rewrite the scope statement in your own words.
+Connect Four inside a 4 × 4 × 4 cube whose slices turn like a Rubik's Cube. On your turn you either
+drop a piece into one of 16 shafts, or twist a layer or slab 90° and let gravity re-settle every piece.
+Four in a line wins.
 
-**Recording:** TODO link (3–5 min) · **Evaluation:** [EVALUATION.md](EVALUATION.md) ·
+**Recording:** TODO link (3–5 min) · **Rules:** [RULES.md](RULES.md) · **Evaluation:** [EVALUATION.md](EVALUATION.md) ·
 **Agent team log:** [AGENT-TEAM.md](AGENT-TEAM.md) · **Playtest notes:** [PLAYTEST.md](PLAYTEST.md)
 
 ## Scope statement
 
-**In scope (this build):** two-player Connect Four on a 4×4×4 cube. Each turn a player drops a piece into
-one of 16 vertical shafts (A1–D4), and it falls to the lowest empty cell. Four in a straight line in any
-of the 76 lines of the cube wins (rows, columns, shafts, and all diagonals, including ones that cross all
-four layers). A full board with no line is a draw. Text interface, a machine-playable five-operation
-interface, a minimax baseline, and a Gemini player.
+> **TODO (you): rewrite this section in your own words.**
 
-**Planned next (rotation rules, specified, not yet built):** on your turn, instead of dropping, you may
-tilt the cube left or right; all pieces then fall toward the new bottom. A tilt uses your whole turn. If
-a tilt creates four-in-a-row for both players, the player who tilted wins. Each player has 2 tilts per game.
+**In scope:** the complete game in [RULES.md](RULES.md): drops, 24 twists (4 layers and 8 vertical slabs,
+both directions), gravity after every twist, the 76 winning lines, the twist rules R6, R7 and R11, and a
+100-turn limit. A machine-playable five-operation interface, a minimax baseline, a Gemini player, an
+evaluation on a declared suite, and two ways for humans to play: a 3D browser version with drag-to-twist
+(`web/index.html`) and a terminal version.
 
-**Excluded:** 3D graphics, sound, network play, Pop Out and other Hasbro variants, boards other than 4×4×4.
-**First cut if time runs out:** the rotation rules (the drop-only game is complete on its own).
+**Changed from my Week 3 scope:** I first planned 3D gravity Connect Four with tilting, built the
+drop-only version first (pilot, 2026-11-05), then replaced tilting with Rubik's-style twists (2026-11-08).
+
+**Excluded:** boards other than 4 × 4 × 4, half-turns or 180° twists, a limit on the number of twists,
+network play, sound.
+**First cut if time runs out:** vertical-slab twists (keep layer twists only).
 
 ## Setup, play, test, evaluate
 
@@ -30,13 +33,16 @@ Every command runs from **`midterms/yvnvii/`** in a fresh clone.
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# play: you vs the minimax baseline (type moves like B3)
+# play in 3D: open this file in a browser (no install, no server)
+open web/index.html            # macOS; or double-click it
+
+# play in the terminal: you vs the minimax baseline (type B3 to drop, or e.g. "twist layer 2 cw"; ? lists all)
 python scripts/play.py
 python scripts/play.py --you O --opponent greedy
 
 # watch two agents play, no human input
 python scripts/play.py --watch minimax greedy --delay 0.5
-python scripts/play.py --watch model minimax --trace traces/demo.jsonl    # needs Vertex setup below
+python scripts/play.py --watch model minimax --trace traces/demo.jsonl     # needs the Vertex setup below
 
 # deterministic tests (what CI runs; no network, no credentials)
 python -m pytest -v
@@ -44,6 +50,7 @@ python -m pytest -v
 # evaluation on the declared suite (suite.json)
 python scripts/evaluate.py --candidate minimax --opponent greedy --run baseline-vs-greedy
 python scripts/evaluate.py --candidate model   --opponent greedy --run model-vs-greedy
+python scripts/evaluate.py --candidate model   --opponent minimax --run model-vs-minimax
 python scripts/summarize.py > results/TABLE.md
 ```
 
@@ -51,43 +58,69 @@ python scripts/summarize.py > results/TABLE.md
 `export GOOGLE_CLOUD_PROJECT=<your-project-id>` (optionally `GOOGLE_CLOUD_LOCATION`, default `global`).
 No key is stored in the repository.
 
+## Code map
+
+| File | Role |
+|---|---|
+| `RULES.md` | The rule specification (R1–R14). |
+| `c4d/rules.py` | The rules as pure functions: board, twists, gravity, lines, legality. |
+| `c4d/engine.py` | `TwistFour`: the authoritative game behind the five operations. |
+| `c4d/runner.py` | Runs an episode; holds the only game; enforces limits; labels fallbacks; writes traces. |
+| `c4d/players.py` | Random, greedy, and the minimax baseline. They rebuild a private copy of the board from observations. |
+| `c4d/model_player.py` | The Gemini player: prompt in, one action text out. No tools. |
+| `web/index.html` | 3D browser version for people (playtest, recording). Same rules, in JavaScript; cross-checked against the Python rules on 300 random games (10,760 steps, all identical). |
+
 ## Machine-playable interface (`c4d/engine.py`)
 
 | Operation | What it does |
 |---|---|
-| `reset(seed, opening=())` | Empty board, X to move; `opening` replays fixed moves to create a suite position. |
-| `observe(player_id)` | A **copy** of the full board plus text rendering, your symbol, move number, last move. |
-| `legal_actions(player_id)` | Non-full shafts in fixed order A1…D4, and `[]` if it is not your turn. No ranking. |
-| `step(player_id, action)` | Validates and applies one drop. An invalid action returns an error and changes nothing. |
-| `outcome()` | `ongoing`, or `terminal` with reason (`connect_four`, `board_full`, or a runner limit), winner, score. |
+| `reset(seed, opening=())` | Empty cube, X to move; `opening` replays fixed actions to build a suite position. |
+| `observe(player_id)` | A **copy** of the whole board, a text rendering, turn number, and the previous action (needed for R7). |
+| `legal_actions(player_id)` | Legal action texts in a fixed order (16 drops, then 24 twists), or `[]` if it is not your turn. No ranking. |
+| `step(player_id, action)` | Validates and applies one action text; an illegal one returns the reason and changes nothing. |
+| `outcome()` | `ongoing`, or `terminal` with reason (`connect_four`, `turn_limit`, `no_legal_actions`, or a runner limit), winner, score. |
 
-**Information boundary:** Connect Four is fully observed, so both roles may see the whole board; there is
-no secret for the legal-action list to leak. The boundary that matters is that players get a copy, never
-the engine (`tests/test_engine.py::test_observation_is_a_copy...`), and the model's prompt contains only
-the observation and legal moves. The runner (`c4d/runner.py`) holds the only authoritative game.
+**Action vocabulary:** `drop B3`, `twist layer 2 cw|ccw`, `twist col B fwd|back`, `twist row 3 left|right`
+(40 actions). I chose readable text over numbered actions so the model's reply and the trace say what
+happened, and so the same strings work for people in the terminal.
+
+**Information boundary:** Twist Four is fully observed (R14). Both roles may see the whole board, so there
+is no secret for the legal-action list to leak; it only filters the fixed vocabulary by rules that follow from
+the visible board and the visible last action. Players get a copy, never the engine
+(`tests/test_engine.py::test_observation_is_a_copy_not_a_handle`), and the model's prompt contains only the
+rules, the observation and the legal actions.
 
 ## Rule/source map
 
-| # | Rule | Label | Locator / rationale |
+Labels: `manual` = from a published rulebook; `design` = my own rule or a deliberate adaptation;
+locators point to the rulebook, to [RULES.md](RULES.md), and to the code and tests that enforce the rule.
+
+| Rule | Summary | Label | Locator / rationale |
 |---|---|---|---|
-| R1 | Two players alternate turns, one piece per turn | manual | Hasbro Connect 4 instructions, [PDF](https://instructions.hasbro.com/api/download/01081_en-us_connect-4-game-instructions.pdf). Code: `engine.py` `step()` |
-| R2 | A piece dropped in a column falls to the lowest empty cell | manual | Hasbro PDF (as above). Code: `engine.py` `height()`, `step()`; test `test_gravity_pieces_stack_from_the_bottom` |
-| R3 | X (player 1) always moves first | design | Fixed for reproducible evaluation; the suite plays each case with the candidate as X and as O to cancel first-move advantage |
-| R4 | Board is 4×4×4: 16 vertical shafts, 4 layers | design | Replaces Connect Four's 7×6 vertical grid. 4 is the smallest size where four-in-a-row fits; reference: Score Four (1967, A. P. Nienstaedt and H. Heller), a 3D four-in-a-row game ([analog.games](https://www.analog.games/gameItem/show/419cd83f96e69db70196e70053f5021a/score-four?lang=EN)) |
-| R5 | Four in a line wins, in any of the 76 lines: rows, columns, shafts, planar and space diagonals | design | Extends Connect Four's horizontal/vertical/diagonal win (manual, Hasbro PDF) to 3D as in Score Four's "any level or angle" (that page is a database description, not a rulebook). Code: `engine.py` `LINES`; tests `test_cube_has_76_winning_lines...`, `test_space_diagonal_win...` |
-| R6 | A full board with no line is a draw | assumed | **TODO:** confirm in the Hasbro PDF, then relabel `manual` with the page. Code: `engine.py` `step()`; test `test_full_board_without_line_is_draw` |
-| R7 | An illegal action (full shaft, malformed, wrong turn, game over) is rejected and changes nothing | design | Lets the runner count illegal attempts and give feedback. Code: `engine.py` `step()`; tests in `test_engine.py` |
-| R8 | Episode limits: 64 accepted moves, 48 model calls per model player (failed calls count), 60 s per call, 30 min per episode, 2 attempts per turn then a labeled fallback | design | Code: `runner.py` `Limits`, `run_episode()`; tests in `test_runner.py` |
-| R9 | *(planned)* Tilt left/right instead of dropping; pieces re-fall | design | Decided 2026-11-05 |
-| R10 | *(planned)* A tilt uses the whole turn | design | Decided 2026-11-05: keeps one action per turn, simpler for players and the interface |
-| R11 | *(planned)* If a tilt makes lines for both players, the tilter wins | design | Decided 2026-11-05: rewards the risk of tilting |
-| R12 | *(planned)* Each player has 2 tilts per game | design | Decided 2026-11-05: prevents endless back-and-forth tilting |
+| R1 | 4 × 4 × 4 cube: 16 shafts, 4 layers | design | RULES.md §1. Replaces Connect Four's 7 × 6 grid; 4 is the smallest size that fits four in a row. Reference: Score Four (1967). `rules.py` |
+| R2 | Empty start, X moves first | design | RULES.md §1. Fixed for reproducible evaluation; the suite plays both sides. `test_initial_state_R2` |
+| R3 | Gravity: pieces fall to the bottom of their shaft, also after every twist | design | Extends Connect Four's gravity (manual, Hasbro sheet) to twists. `rules.settle`; `test_gravity_and_piece_counts_hold...` |
+| R4 | Drop into a non-full shaft; the piece lands on top | manual | Hasbro Connect 4 instructions ([PDF](https://instructions.hasbro.com/api/download/01081_en-us_connect-4-game-instructions.pdf)); **TODO: add page/section**. `rules.apply`; `test_drop_lands_on_top_of_its_shaft_R4` |
+| R5 | Twist one layer or slab 90°, then gravity; exact cell mapping in RULES.md | design | RULES.md §3, decided 2026-11-08. Idea from the Rubik's Cube (Ernő Rubik, 1974). `rules.turn_cell`, `PERM`; worked-example tests |
+| R6 | A twist must change the board | design | Decided 2026-11-08: no passing. `test_no_op_twist_is_illegal_R6` |
+| R7 | No exact undo of the opponent's previous twist | design | Decided 2026-11-08: stops endless back-and-forth. `test_instant_undo_is_illegal_but_repeating_is_legal_R7` |
+| R8 | Illegal actions are rejected and change nothing | design | Lets the runner count illegal attempts and give feedback. `test_full_shaft_malformed_and_out_of_turn...` |
+| R9 | Four in a straight line in any of 76 lines | design | Extends Connect Four's four-in-a-row (manual, Hasbro sheet) to 3D, as Score Four does. `test_cube_has_76_lines...`, `test_space_diagonal_win...` |
+| R10 | A drop that completes your line wins | manual | Hasbro Connect 4 instructions; **TODO: add page/section**. `test_drop_completes_a_line_R10` |
+| R11 | After a twist: your line only → you win; both → twister wins; opponent's only → opponent wins | design | Decided 2026-11-08. `test_twist_making_both_lines...`, `test_twist_making_only_the_opponents_line_loses_R11` |
+| R12 | No winner after 100 turns → draw | design | Decided 2026-11-08: twists are unlimited, so the game needs an end. `test_turn_limit_draw_R12` |
+| R13 | No legal action → draw | design | Completes the spec for a rare stalemate. `test_no_legal_action_is_a_draw_R13` |
+| R14 | Fully observed; the previous action is visible | design | Needed so players can know which twist R7 bars. `test_both_roles_see_the_same_board...` |
+| E1 | Episode limits: 100 accepted actions, 110 model calls per model player (failed calls count), 60 s per call, 30 min per episode, 2 attempts per turn then a labeled fallback | design | `runner.py` `Limits`; `tests/test_runner.py` |
 
 ## Sources and reuse terms
 
-- **Connect Four**, designed by Howard Wexler and Ned Strongin, published by Milton Bradley (1974), now Hasbro. Only the
-  rules are used; no text, art, or trademarked assets are copied. Rules are referenced from Hasbro's public
-  instruction sheet (linked above).
-- **Score Four** (1967): referenced for the 3D four-in-a-row idea only.
-- All code in this folder is original, written for this midterm with an AI implementation agent (see AGENT-TEAM.md).
-- Python dependency: [`google-genai`](https://pypi.org/project/google-genai/) (Apache-2.0), installed via pip and not vendored. `pytest` (MIT) for tests.
+- **Connect Four** (Howard Wexler and Ned Strongin; Milton Bradley, 1974; now Hasbro): drop, gravity,
+  four in a row. Only the rules are used; no text, art or trademarked assets are copied.
+- **Score Four** (1967; [analog.games entry](https://www.analog.games/gameItem/show/419cd83f96e69db70196e70053f5021a/score-four?lang=EN)):
+  four in a row in a 4 × 4 × 4 grid.
+- **Rubik's Cube** (Ernő Rubik, 1974): the idea of turning slices of a cube. No names, logos or artwork
+  are used, and the game is not affiliated with the Rubik's brand.
+- All code in this folder is original, written for this midterm with AI agents under my direction (see AGENT-TEAM.md).
+- Dependencies: [`google-genai`](https://pypi.org/project/google-genai/) (Apache-2.0) and `pytest` (MIT), installed with pip, not vendored.
+  The browser version loads [three.js](https://github.com/mrdoob/three.js) 0.160.0 (MIT) from the jsDelivr CDN.

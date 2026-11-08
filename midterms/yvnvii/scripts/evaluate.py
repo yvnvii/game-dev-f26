@@ -3,7 +3,7 @@
 Each case is played twice: candidate as X (player 1) and candidate as O (player 2).
 Writes one JSONL trace per episode and a summary.json under results/<run-name>/.
 
-Examples (run from midterms/<github-login>/):
+Examples (run from midterms/yvnvii/):
   python scripts/evaluate.py --candidate minimax --opponent greedy --run baseline-vs-greedy
   python scripts/evaluate.py --candidate model --opponent greedy --run model-vs-greedy
   python scripts/evaluate.py --candidate model --opponent minimax --run model-vs-minimax --cases S1-empty
@@ -58,8 +58,8 @@ def main():
     ap.add_argument("--model", default="gemini-3.5-flash-lite")
     ap.add_argument("--history", default="none", choices=["none", "moves"])
     ap.add_argument("--max-output-tokens", type=int, default=4096,
-                    help="model reply budget; 1024 truncated replies before the MOVE line")
-    ap.add_argument("--call-limit", type=int, default=48)
+                    help="model output limit; run model-vs-greedy (2026-11-08) used 1024")
+    ap.add_argument("--call-limit", type=int, default=110)
     ap.add_argument("--call-timeout", type=float, default=60.0)
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
@@ -81,20 +81,21 @@ def main():
             "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
             "candidate": args.candidate, "opponent": args.opponent, "minimax_depth": args.depth,
             "model": args.model if "model" in (args.candidate, args.opponent) else None,
-            "history": args.history, "max_output_tokens": args.max_output_tokens}
+            "history": args.history,
+            "max_output_tokens": args.max_output_tokens if "model" in (args.candidate, args.opponent) else None}
     episodes = []
     for case in cases:
-        for cand_side in (1, 2):
-            seed = zlib.crc32(f"{case['id']}:{cand_side}".encode())
+        for trial, cand_side in enumerate(case.get("candidate_sides", [1, 2])):
+            seed = zlib.crc32(f"{case['id']}:{cand_side}:{trial}".encode())
             cand = make_player(args.candidate, seed, args)
             opp = make_player(args.opponent, seed + 1, args)
             players = {cand_side: cand, 3 - cand_side: opp}
-            trace = os.path.join(out_dir, f"{case['id']}_cand-as-{'X' if cand_side == 1 else 'O'}.jsonl")
+            trace = os.path.join(out_dir, f"{case['id']}_t{trial + 1}_cand-as-{'X' if cand_side == 1 else 'O'}.jsonl")
             r = run_episode(players, opening=case["opening"], seed=seed, limits=limits,
                             case_id=case["id"], trace_path=trace, meta=meta)
             w = r["outcome"]["winner"]
             result = "win" if w == cand_side else "loss" if w == 3 - cand_side else "draw/none"
-            row = {"case": case["id"], "heldout": case["heldout"], "candidate_side": cand_side,
+            row = {"case": case["id"], "trial": trial + 1, "heldout": case["heldout"], "candidate_side": cand_side,
                    "result": result, "reason": r["outcome"]["reason"], "steps": r["steps"],
                    "wall_s": r["wall_s"], "candidate": r["players"][cand_side],
                    "opponent": r["players"][3 - cand_side], "trace": trace}

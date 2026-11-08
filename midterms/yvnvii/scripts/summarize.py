@@ -1,7 +1,7 @@
 """Build the comparison table (Markdown) from results/*/summary.json.
 
 Cost is computed from prices.json, which you fill in with the provider's published price on the
-day you ran the evaluation (dated cost). Run from midterms/<github-login>/:
+day you ran the evaluation (dated cost). Run from midterms/yvnvii/:
   python scripts/summarize.py > results/TABLE.md
 """
 import glob

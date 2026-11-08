@@ -1,53 +1,66 @@
 {
-  "declared": "2026-11-05",
-  "note": "Declared before any prompt tuning. Do not edit cases after tuning starts; add new cases with a new id and date instead. Held-out cases are never used while tuning the prompt.",
-  "trials_per_case": "2: the candidate plays once as X (player 1) and once as O (player 2)",
+  "game": "Twist Four (RULES.md)",
+  "declared": "2026-11-08",
+  "note": "Declared before any prompt tuning for Twist Four. Do not edit cases after this date; add new cases with a new id and date. Held-out cases are never used while adjusting the model prompt. History: the drop-only pilot suite (S1-S3, H1) was declared 2026-11-05 and is in git history; its runs are reported in EVALUATION.md as a pilot.",
+  "trials_per_case": "2 per case. By default the candidate plays once as X and once as O; a case may list 'candidate_sides' instead (T3: twice as O, with different seeds).",
   "cases": [
     {
-      "id": "S1-empty",
+      "id": "T1-empty",
       "opening": [],
       "heldout": false,
-      "why": "Standard start; tests opening play and the full game."
+      "why": "Standard start; the full game, including when (and whether) a player chooses to twist."
     },
     {
-      "id": "S2-midgame",
+      "id": "T2-centre",
       "opening": [
-        "B2",
-        "C3",
-        "C2",
-        "B3",
-        "B2",
-        "C3"
+        "drop B2",
+        "drop C3",
+        "drop C2",
+        "drop B3",
+        "drop B2",
+        "drop C3"
       ],
       "heldout": false,
-      "why": "Six central moves already played; tests mid-game reading of a stacked centre."
+      "why": "Six drops stacked in the centre, X to move; mid-game reading with no twists yet."
     },
     {
-      "id": "S3-must-block",
+      "id": "T3-twist-win",
       "opening": [
-        "A1",
-        "A2",
-        "B1",
-        "B2",
-        "C1"
+        "drop D1",
+        "drop C2",
+        "drop B3",
+        "drop D1",
+        "twist layer 1 cw",
+        "twist col C back",
+        "drop B4",
+        "drop C1",
+        "twist row 4 left",
+        "drop C3",
+        "twist layer 2 cw",
+        "twist col A back",
+        "drop A3"
       ],
       "heldout": false,
-      "why": "X threatens D1 to complete the bottom row and O is to move: as O the candidate must block at once; as X it must keep the initiative after O blocks. Tests seeing a one-move loss."
+      "why": "O to move can win at once, but ONLY with a twist (twist col D fwd). The candidate always plays O here (two trials, different seeds); playing X would be a forced loss that says nothing about the candidate. Tests seeing twist wins.",
+      "candidate_sides": [
+        2,
+        2
+      ]
     },
     {
-      "id": "H1-diagonal",
+      "id": "H1-twisted",
       "opening": [
-        "A1",
-        "D4",
-        "B2",
-        "D1",
-        "B2",
-        "C3",
-        "C3",
-        "A4"
+        "drop C3",
+        "twist layer 1 cw",
+        "twist layer 1 cw",
+        "twist row 2 right",
+        "drop D1",
+        "drop D2",
+        "twist col A back",
+        "twist col D back"
       ],
       "heldout": true,
-      "why": "HELD OUT. Diagonal pressure across layers; tests 3D lines the prompt was never tuned on."
+      "why": "HELD OUT. A position reached through four twists, X to move, no immediate win for either side."
     }
   ]
 }

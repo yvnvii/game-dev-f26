@@ -6,7 +6,7 @@
 - episode wall-clock timeout                           -> terminal reason "episode_timeout"
 - invalid actions: the model gets `max_attempts_per_turn` tries (with the rejection reason
   as feedback); after that the runner plays a labeled FALLBACK move (first legal shaft in
-  centre-first order). Fallbacks are never counted as model moves.
+  centre-first order, else the first legal action). Fallbacks are never counted as model moves.
 """
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ import json
 import time
 from dataclasses import asdict, dataclass, field
 
-from .engine import Connect3D
-from .players import _center_order
+from .engine import TwistFour
+from .players import fallback_action
 
 
 @dataclass
 class Limits:
-    step_limit: int = 64              # a 4x4x4 board is full after 64 moves
-    call_limit: int = 48              # per model player, failed calls included
+    step_limit: int = 100             # backstop; the rules already end the game after 100 turns (R12)
+    call_limit: int = 110             # per model player, failed calls included (~50 own turns x 2 attempts + margin)
     call_timeout_s: float = 60.0
     episode_timeout_s: float = 1800.0
     max_attempts_per_turn: int = 2
@@ -54,7 +54,7 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
                 case_id: str = "", trace_path: str | None = None, verbose: bool = False,
                 meta: dict | None = None) -> dict:
     limits = limits or Limits()
-    game = Connect3D()
+    game = TwistFour()
     game.reset(seed, list(opening))
     stats = {p: PlayerStats(name=players[p].name) for p in (1, 2)}
     events = []
@@ -141,7 +141,7 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
             log({"type": "move", "n": steps, "player": p, "source": "model", "action": r["action"],
                  "placed": r["placed"], "latency_s": res.get("latency_s"),
                  "input_tokens": res.get("input_tokens"), "output_tokens": res.get("output_tokens"),
-                 "raw": res.get("raw"), "finish_reason": res.get("finish_reason")})
+                 "finish_reason": res.get("finish_reason"), "raw": res.get("raw")})
             break
 
         if accepted:
@@ -149,7 +149,7 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
         if out_of_budget:
             game.force_end("call_limit")
             break
-        fb_action = _center_order(legal)[0]
+        fb_action = fallback_action(legal)
         r = game.step(p, fb_action)
         st.fallback_moves += 1
         steps += 1
@@ -164,8 +164,9 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
                         "mean_latency_s": (round(sum(stats[p].latencies) / len(stats[p].latencies), 3)
                                            if stats[p].latencies else None)} for p in (1, 2)},
         "final_board": game.render(),
+        "winning_line": game.winning_line(),
     }
-    log({"type": "end", **{k: result[k] for k in ("outcome", "steps", "wall_s", "players")}})
+    log({"type": "end", **{k: result[k] for k in ("outcome", "winning_line", "steps", "wall_s", "players")}})
     if trace_path:
         with open(trace_path, "w") as f:
             for ev in events:
