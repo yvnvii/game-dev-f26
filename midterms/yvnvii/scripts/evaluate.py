@@ -34,7 +34,8 @@ def make_player(kind, seed, args):
         return RandomPlayer(seed=seed)
     if kind == "model":
         from c4d.model_player import ModelPlayer
-        return ModelPlayer(model=args.model, history_mode=args.history)
+        return ModelPlayer(model=args.model, history_mode=args.history,
+                           max_output_tokens=args.max_output_tokens)
     raise SystemExit(f"unknown player kind {kind}")
 
 
@@ -56,6 +57,8 @@ def main():
     ap.add_argument("--depth", type=int, default=3, help="minimax search depth")
     ap.add_argument("--model", default="gemini-3.5-flash-lite")
     ap.add_argument("--history", default="none", choices=["none", "moves"])
+    ap.add_argument("--max-output-tokens", type=int, default=4096,
+                    help="model reply budget; 1024 truncated replies before the MOVE line")
     ap.add_argument("--call-limit", type=int, default=48)
     ap.add_argument("--call-timeout", type=float, default=60.0)
     ap.add_argument("--quiet", action="store_true")
@@ -78,7 +81,7 @@ def main():
             "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
             "candidate": args.candidate, "opponent": args.opponent, "minimax_depth": args.depth,
             "model": args.model if "model" in (args.candidate, args.opponent) else None,
-            "history": args.history}
+            "history": args.history, "max_output_tokens": args.max_output_tokens}
     episodes = []
     for case in cases:
         for cand_side in (1, 2):

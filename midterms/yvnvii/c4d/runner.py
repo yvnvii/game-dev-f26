@@ -125,13 +125,15 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
             if action is None:
                 st.illegal_attempts += 1
                 feedback = "no line of the form 'MOVE: <shaft>' was found"
-                log({"type": "illegal", "player": p, "reason": feedback, "raw": res.get("raw")})
+                log({"type": "illegal", "player": p, "reason": feedback, "raw": res.get("raw"),
+                     "finish_reason": res.get("finish_reason")})
                 continue
             r = game.step(p, action)
             if not r["ok"]:
                 st.illegal_attempts += 1
                 feedback = f"{action}: {r['error']}"
-                log({"type": "illegal", "player": p, "action": action, "reason": r["error"]})
+                log({"type": "illegal", "player": p, "action": action, "reason": r["error"],
+                     "finish_reason": res.get("finish_reason")})
                 continue
             accepted = True
             st.moves += 1
@@ -139,7 +141,7 @@ def run_episode(players: dict, opening=(), seed: int = 0, limits: Limits | None 
             log({"type": "move", "n": steps, "player": p, "source": "model", "action": r["action"],
                  "placed": r["placed"], "latency_s": res.get("latency_s"),
                  "input_tokens": res.get("input_tokens"), "output_tokens": res.get("output_tokens"),
-                 "raw": res.get("raw")})
+                 "raw": res.get("raw"), "finish_reason": res.get("finish_reason")})
             break
 
         if accepted:

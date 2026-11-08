@@ -1,0 +1,19 @@
+{"type": "start", "case": "S3-must-block", "seed": 2013924990, "opening": ["A1", "A2", "B1", "B2", "C1"], "players": {"1": "greedy", "2": "minimax"}, "limits": {"step_limit": 64, "call_limit": 48, "call_timeout_s": 60.0, "episode_timeout_s": 1800.0, "max_attempts_per_turn": 2}, "game_version": "42817af", "run": "baseline-vs-greedy", "date": "2026-11-08T16:51:44-05:00", "candidate": "minimax", "opponent": "greedy", "minimax_depth": 3, "model": null, "history": "none"}
+{"type": "move", "n": 1, "player": 2, "source": "baseline", "action": "D1", "placed": [3, 0, 0], "search_value": 8, "nodes": 2018}
+{"type": "move", "n": 2, "player": 1, "source": "baseline", "action": "A1", "placed": [0, 0, 1]}
+{"type": "move", "n": 3, "player": 2, "source": "baseline", "action": "C2", "placed": [2, 1, 0], "search_value": 35, "nodes": 633}
+{"type": "move", "n": 4, "player": 1, "source": "baseline", "action": "D2", "placed": [3, 1, 0]}
+{"type": "move", "n": 5, "player": 2, "source": "baseline", "action": "B2", "placed": [1, 1, 1], "search_value": 24, "nodes": 791}
+{"type": "move", "n": 6, "player": 1, "source": "baseline", "action": "C1", "placed": [2, 0, 1]}
+{"type": "move", "n": 7, "player": 2, "source": "baseline", "action": "C2", "placed": [2, 1, 1], "search_value": 42, "nodes": 630}
+{"type": "move", "n": 8, "player": 1, "source": "baseline", "action": "A4", "placed": [0, 3, 0]}
+{"type": "move", "n": 9, "player": 2, "source": "baseline", "action": "C2", "placed": [2, 1, 2], "search_value": 80, "nodes": 588}
+{"type": "move", "n": 10, "player": 1, "source": "baseline", "action": "C2", "placed": [2, 1, 3]}
+{"type": "move", "n": 11, "player": 2, "source": "baseline", "action": "B2", "placed": [1, 1, 2], "search_value": 74, "nodes": 643}
+{"type": "move", "n": 12, "player": 1, "source": "baseline", "action": "B2", "placed": [1, 1, 3]}
+{"type": "move", "n": 13, "player": 2, "source": "baseline", "action": "A2", "placed": [0, 1, 1], "search_value": 97, "nodes": 732}
+{"type": "move", "n": 14, "player": 1, "source": "baseline", "action": "D2", "placed": [3, 1, 1]}
+{"type": "move", "n": 15, "player": 2, "source": "baseline", "action": "A2", "placed": [0, 1, 2], "search_value": 100000, "nodes": 546}
+{"type": "move", "n": 16, "player": 1, "source": "baseline", "action": "A2", "placed": [0, 1, 3]}
+{"type": "move", "n": 17, "player": 2, "source": "baseline", "action": "D2", "placed": [3, 1, 2], "search_value": 100002, "nodes": 612}
+{"type": "end", "outcome": {"status": "terminal", "reason": "connect_four", "winner": 2, "score": {"2": 1, "1": -1}}, "steps": 17, "wall_s": 0.27, "players": {"1": {"name": "greedy", "moves": 8, "fallback_moves": 0, "calls": 0, "failed_calls": 0, "illegal_attempts": 0, "input_tokens": 0, "output_tokens": 0, "latencies": null, "mean_latency_s": 0.0}, "2": {"name": "minimax", "moves": 9, "fallback_moves": 0, "calls": 0, "failed_calls": 0, "illegal_attempts": 0, "input_tokens": 0, "output_tokens": 0, "latencies": null, "mean_latency_s": 0.029}}}

@@ -1,8 +1,12 @@
 {
-  "date": null,
+  "date": "2026-11-08",
   "source": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
   "note": "Fill in on the day you run the live evaluation: USD per 1M tokens, standard (non-batch) price.",
   "models": {
-    "gemini-3.5-flash-lite": {"input_per_1m": null, "output_per_1m": null}
+    "gemini-3.5-flash-lite": {
+      "input_per_1m": 0.3,
+      "output_per_1m": 2.5,
+      "endpoint": "global, standard tier, <=200K context"
+    }
   }
 }

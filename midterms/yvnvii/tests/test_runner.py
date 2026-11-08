@@ -97,3 +97,26 @@ def test_prompt_contains_only_observation_and_legal_moves():
     assert "Legal moves: " + ", ".join(g.legal_actions(1)) in p
     # no search scores, no engine internals
     assert "search_value" not in p and "_terminal" not in p
+
+
+def test_truncated_reply_without_move_line_is_illegal_and_traced_with_finish_reason():
+    """From run results/model-vs-greedy (2026-11-08): 27 of 41 illegal attempts were replies cut off
+    at max_output_tokens before the MOVE line. Such a reply must count as one illegal attempt, its
+    trace event must carry finish_reason MAX_TOKENS, and the model's retry must still be accepted."""
+    def truncated(obs, legal):
+        return {"action": None, "raw": "Looking at the centre shafts, B2 would block the",
+                "finish_reason": "MAX_TOKENS", "input_tokens": 0, "output_tokens": 0}
+
+    def valid(obs, legal):
+        return {"action": "B2", "raw": "MOVE: B2", "finish_reason": "STOP",
+                "input_tokens": 0, "output_tokens": 0}
+
+    r = run_episode({1: ScriptedPlayer([truncated, valid]), 2: GreedyPlayer(0)}, seed=0,
+                    limits=Limits(max_attempts_per_turn=2, step_limit=1))
+    st = r["players"][1]
+    assert st["illegal_attempts"] == 1 and st["fallback_moves"] == 0
+    illegal = [e for e in r["events"] if e["type"] == "illegal"]
+    assert len(illegal) == 1 and illegal[0]["finish_reason"] == "MAX_TOKENS"
+    accepted = moves_by(r, "model")
+    assert len(accepted) == 1 and accepted[0]["action"] == "B2"
+    assert accepted[0]["finish_reason"] == "STOP"

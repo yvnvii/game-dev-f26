@@ -50,7 +50,7 @@ class ModelPlayer(Player):
     is_model = True
 
     def __init__(self, model: str = "gemini-3.5-flash-lite", history_mode: str = "none",
-                 history_len: int = 16, temperature: float = 0.2, max_output_tokens: int = 1024):
+                 history_len: int = 16, temperature: float = 0.2, max_output_tokens: int = 4096):
         self.model = model
         self.history_mode = history_mode
         self.history_len = history_len
@@ -85,6 +85,10 @@ class ModelPlayer(Player):
         latency = time.monotonic() - t0
         text = resp.text or ""
         um = getattr(resp, "usage_metadata", None)
+        # Lets traces distinguish a truncated reply (MAX_TOKENS) from one that just omitted MOVE.
+        cands = getattr(resp, "candidates", None) or []
+        fr = getattr(cands[0], "finish_reason", None) if cands else None
+        finish_reason = getattr(fr, "name", None) or (str(fr) if fr is not None else None)
         return {
             "action": parse_move(text),
             "raw": text[-600:],
@@ -93,4 +97,5 @@ class ModelPlayer(Player):
             "output_tokens": (getattr(um, "candidates_token_count", 0) or 0)
                              + (getattr(um, "thoughts_token_count", 0) or 0),
             "model_version": getattr(resp, "model_version", None),
+            "finish_reason": finish_reason,
         }
