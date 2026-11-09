@@ -1,0 +1,13 @@
+{"type": "start", "case": "T1-empty", "seed": 2074324692, "opening": [], "players": {"1": "minimax", "2": "greedy"}, "limits": {"step_limit": 100, "call_limit": 110, "call_timeout_s": 60.0, "clock_s": 900.0, "max_attempts_per_turn": 2}, "game_version": "1959f17", "run": "baseline-vs-greedy", "date": "2026-11-08T21:40:39-05:00", "candidate": "minimax", "opponent": "greedy", "minimax_depth": 3, "model": null, "history": "none", "prompt_version": null, "max_output_tokens": null}
+{"type": "move", "n": 1, "player": 1, "source": "baseline", "action": "drop D1", "placed": [3, 0, 0], "search_value": 11, "nodes": 2835}
+{"type": "move", "n": 2, "player": 2, "source": "baseline", "action": "drop D3", "placed": [3, 2, 0]}
+{"type": "move", "n": 3, "player": 1, "source": "baseline", "action": "drop A4", "placed": [0, 3, 0], "search_value": 16, "nodes": 2582}
+{"type": "move", "n": 4, "player": 2, "source": "baseline", "action": "drop C1", "placed": [2, 0, 0]}
+{"type": "move", "n": 5, "player": 1, "source": "baseline", "action": "drop D4", "placed": [3, 3, 0], "search_value": 44, "nodes": 2578}
+{"type": "move", "n": 6, "player": 2, "source": "baseline", "action": "drop C3", "placed": [2, 2, 0]}
+{"type": "move", "n": 7, "player": 1, "source": "baseline", "action": "drop B3", "placed": [1, 2, 0], "search_value": 50, "nodes": 2625}
+{"type": "move", "n": 8, "player": 2, "source": "baseline", "action": "drop C2", "placed": [2, 1, 0]}
+{"type": "move", "n": 9, "player": 1, "source": "baseline", "action": "drop C4", "placed": [2, 3, 0], "search_value": 57, "nodes": 4587}
+{"type": "move", "n": 10, "player": 2, "source": "baseline", "action": "drop B4", "placed": [1, 3, 0]}
+{"type": "move", "n": 11, "player": 1, "source": "baseline", "action": "twist col B fwd", "placed": null, "search_value": 100003, "nodes": 6743}
+{"type": "end", "outcome": {"status": "terminal", "reason": "connect_four", "winner": 1, "score": {"1": 1, "2": -1}}, "winning_line": ["A4 L1", "B4 L1", "C4 L1", "D4 L1"], "steps": 11, "wall_s": 0.97, "clock_used_s": {"1": 0.964, "2": 0.002}, "players": {"1": {"name": "minimax", "moves": 6, "fallback_moves": 0, "calls": 0, "failed_calls": 0, "illegal_attempts": 0, "input_tokens": 0, "output_tokens": 0, "clock_used_s": 0.964, "latencies": null, "mean_latency_s": 0.161}, "2": {"name": "greedy", "moves": 5, "fallback_moves": 0, "calls": 0, "failed_calls": 0, "illegal_attempts": 0, "input_tokens": 0, "output_tokens": 0, "clock_used_s": 0.002, "latencies": null, "mean_latency_s": 0.0}}}
