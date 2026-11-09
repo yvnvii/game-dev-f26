@@ -8,6 +8,7 @@ Examples (run from midterms/yvnvii/):
   python scripts/evaluate.py --candidate model --opponent greedy --run model-vs-greedy
   python scripts/evaluate.py --candidate model --opponent minimax --run model-vs-minimax --cases S1-empty
   python scripts/evaluate.py --candidate model --history moves --opponent greedy --run model-hist-vs-greedy
+  python scripts/evaluate.py --candidate model --prompt v2 --cases tuning --opponent greedy --run model-v2-vs-greedy
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ def make_player(kind, seed, args):
     if kind == "model":
         from c4d.model_player import ModelPlayer
         return ModelPlayer(model=args.model, history_mode=args.history,
-                           max_output_tokens=args.max_output_tokens)
+                           prompt_version=args.prompt, max_output_tokens=args.max_output_tokens)
     raise SystemExit(f"unknown player kind {kind}")
 
 
@@ -57,6 +58,8 @@ def main():
     ap.add_argument("--depth", type=int, default=3, help="minimax search depth")
     ap.add_argument("--model", default="gemini-3.5-flash-lite")
     ap.add_argument("--history", default="none", choices=["none", "moves"])
+    ap.add_argument("--prompt", default="v1", choices=["v1", "v2"],
+                    help="model prompt version; v2 was tuned on T1-T3 only (EVALUATION.md)")
     ap.add_argument("--max-output-tokens", type=int, default=4096,
                     help="model output limit; run model-vs-greedy (2026-11-08) used 1024")
     ap.add_argument("--call-limit", type=int, default=110)
@@ -82,6 +85,7 @@ def main():
             "candidate": args.candidate, "opponent": args.opponent, "minimax_depth": args.depth,
             "model": args.model if "model" in (args.candidate, args.opponent) else None,
             "history": args.history,
+            "prompt_version": args.prompt if "model" in (args.candidate, args.opponent) else None,
             "max_output_tokens": args.max_output_tokens if "model" in (args.candidate, args.opponent) else None}
     episodes = []
     for case in cases:

@@ -62,6 +62,32 @@ Before adding twists I evaluated the drop-only game (suite declared 2026-11-05, 
 The cut-off replies were a harness problem, not only a model problem. I raised the limit to 4096 and
 started recording each reply's finish reason (`tests/test_runner.py::test_cut_off_model_reply...`).
 
+### Prompt v2 (2026-11-08)
+
+Prompt v1 is unchanged and is still the default. v2 is chosen with `--prompt v2` (`scripts/evaluate.py`,
+`scripts/play.py`). The run meta records `prompt_version`, and the player name ends in it, e.g.
+`model:gemini-3.5-flash-lite:none:v2`.
+
+- **Tuned on:** the tuning cases T1-T3 only, using the v1 run `results/model-vs-greedy`. I did not look at
+  the held-out case H1-twisted while tuning.
+- **Why:** two failures in the v1 run:
+  1. In both T3-twist-win trials, `twist col D fwd` wins at once. But in the saved end of its reasoning
+     (the last 600 characters) no twist is mentioned, and it chose a drop (`drop B2` both times).
+  2. In T3 trial 1 it called shaft B2 "empty" while its own reading showed an O there. It misreads the
+     3D board from the layer grids.
+- **What changed (v2 = v1 + two additions, built only from the observation):**
+  1. After the layer grids comes a list of every shaft, A1 to D4, from bottom to top (`B2: O X`,
+     `C4: empty`). Then come `Your pieces:` and `Opponent's pieces:` as cell names (`B2 L1`).
+  2. Just before the MOVE instruction comes a checking order: (1) any action that wins now, twists
+     included, remembering gravity; (2) any opponent drop or twist that would win next turn, and stop
+     it; (3) only then build. Ends with "Do not ignore twists."
+- **What v2 does not do:** it computes nothing for the model. There is no list of winning moves, no
+  threat detection, no scores, and no note on any single action. `tests/test_prompt.py` checks three
+  things: v1 is byte-for-byte unchanged, the listing is correct, and no added line names a legal action.
+- **Trace logging (same date, logging only, the prompt is unchanged):** traces now store each model
+  reply in full. Runs before this change (`results/model-vs-greedy`, `model-vs-minimax`,
+  `model-history-vs-greedy`, `pilot-drop-only`) kept only the last 600 characters of each reply.
+
 ## CI evidence
 
 TODO: link to the green `midterm-yvnvii` workflow run on the PR for the submitted commit.

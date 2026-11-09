@@ -1,0 +1,48 @@
+You are playing Twist Four: Connect Four inside a 4x4x4 cube whose slices can turn like a Rubik's Cube.
+
+The cube
+- Columns A-D run left to right, rows 1-4 run front to back (row 1 is nearest you), layers L1-L4 run
+  bottom to top. A shaft is a vertical stack of 4 cells, named like B3.
+- Gravity: pieces always rest at the bottom of their shaft. No piece ever floats.
+
+On your turn, take exactly ONE action:
+1. Drop: put your piece in a shaft that is not full; it falls to the lowest empty cell.
+   Text: "drop B3"
+2. Twist: turn one slice of 16 cells by 90 degrees; the pieces in it move with it. Then gravity pulls
+   every piece in the cube down its shaft.
+   - "twist layer K cw" / "twist layer K ccw": turn layer K (1-4) clockwise / counter-clockwise, seen from above.
+   - "twist col C fwd" / "twist col C back": turn the vertical slab of column C (A-D) so its top rolls
+     toward row 1 / toward row 4.
+   - "twist row R left" / "twist row R right": turn the vertical slab of row R (1-4) so its top rolls
+     toward column A / toward column D.
+   A twist must change the board, and you may not exactly undo the twist your opponent just made.
+
+Winning
+- Four of your pieces in a straight line wins: along a row, a column, a shaft, or any diagonal,
+  including diagonals through all four layers (76 lines in total).
+- After a twist: if it makes a line for both players, the player who twisted wins; if it makes a line
+  only for the opponent, the opponent wins.
+- No winner after 100 turns (drops and twists both count): draw.
+
+You are O. Your opponent is X. Empty cells are '.'.
+Turn 14 of 100.
+Last action: X played "drop A3"
+
+Current board (each layer seen from above; row 1 is at the bottom of each grid):
+      layer L1       layer L2       layer L3       layer L4         (L1 is the bottom)
+      A B C D        A B C D        A B C D        A B C D
+  4   . . . X        . . . .        . . . .        . . . .
+  3   X . O .        . . . .        . . . .        . . . .
+  2   . O . .        . . . .        . . . .        . . . .
+  1   O . X O        X . . .        . . . .        . . . .
+
+Actions so far (oldest first, X moved first): drop D1, drop C2, drop B3, drop D1, twist layer 1 cw, twist col C back, drop B4, drop C1, twist row 4 left, drop C3, twist layer 2 cw, twist col A back, drop A3
+
+Legal actions: drop A1, drop B1, drop C1, drop D1, drop A2, drop B2, drop C2, drop D2, drop A3, drop B3, drop C3, drop D3, drop A4, drop B4, drop C4, drop D4, twist layer 1 cw, twist layer 1 ccw, twist layer 2 cw, twist layer 2 ccw, twist col A fwd, twist col A back, twist col B fwd, twist col B back, twist col C fwd, twist col C back, twist col D fwd, twist col D back, twist row 1 left, twist row 1 right, twist row 2 left, twist row 2 right, twist row 3 left, twist row 3 right, twist row 4 right
+
+Your previous reply was rejected: shaft A1 is full
+
+Think briefly, then end your reply with exactly one line of the form
+MOVE: <one legal action, copied exactly>
+for example
+MOVE: drop B3

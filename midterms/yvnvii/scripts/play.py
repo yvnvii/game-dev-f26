@@ -19,10 +19,10 @@ from c4d.runner import Limits, run_episode  # noqa: E402
 from c4d.players import Player  # noqa: E402
 
 
-def make(kind, seed, model, history):
+def make(kind, seed, model, history, prompt="v1"):
     if kind == "model":
         from c4d.model_player import ModelPlayer
-        return ModelPlayer(model=model, history_mode=history)
+        return ModelPlayer(model=model, history_mode=history, prompt_version=prompt)
     return {"minimax": lambda: MinimaxPlayer(3, seed), "greedy": lambda: GreedyPlayer(seed),
             "random": lambda: RandomPlayer(seed)}[kind]()
 
@@ -74,18 +74,19 @@ def main():
     ap.add_argument("--watch", nargs=2, metavar=("PLAYER_X", "PLAYER_O"))
     ap.add_argument("--model", default="gemini-3.5-flash-lite")
     ap.add_argument("--history", default="none", choices=["none", "moves"])
+    ap.add_argument("--prompt", default="v1", choices=["v1", "v2"], help="model prompt version")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--delay", type=float, default=0.0)
     ap.add_argument("--trace", default=None, help="write a JSONL trace to this path")
     args = ap.parse_args()
 
     if args.watch:
-        players = {i + 1: Watched(make(k, args.seed + i, args.model, args.history), args.delay)
+        players = {i + 1: Watched(make(k, args.seed + i, args.model, args.history, args.prompt), args.delay)
                    for i, k in enumerate(args.watch)}
         limits = Limits()
     else:
         me = 1 if args.you == "X" else 2
-        players = {me: Human(), 3 - me: make(args.opponent, args.seed, args.model, args.history)}
+        players = {me: Human(), 3 - me: make(args.opponent, args.seed, args.model, args.history, args.prompt)}
         limits = Limits(clock_s=365 * 24 * 3600.0)   # E1: people are never timed out
     r = run_episode(players, seed=args.seed, limits=limits, trace_path=args.trace)
     print("\n" + r["final_board"])
