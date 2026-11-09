@@ -9,7 +9,9 @@ Four in a line wins.
 
 ## Scope statement
 
-> **TODO (you): rewrite this section in your own words.**
+In scope: Twist Four, which is Connect Four inside a 4×4×4 cube with rubik's cube twists. On each turn you either drop a piece into one of 16 shafts or twist one of 12 slices (4 layers, 8 vertical slabs) a quarter turn, and gravity pulls every piece down. Four in a line wins. After 100 turns it’s a draw. The full rules are in RULES.md. It includes a 3D browser version (play, watch, or replay an agent’s game), a terminal version, a minimax baseline, a Gemini player, and an evaluation on a declared suite.
+
+Changed from my Week 3 plan: I first wanted to do a completely different game (hitchhiker's guide to galaxy). Then after lecture, I decided to do a game that is more like a puzzle. The first thing I came up was 2D Connect Four where you can tilt the board. Then I found that 2D tilting Connect Four already exists, so I switched to Rubik’s-style twists on 3D cube, which are more original and give more choices each turn.
 
 **In scope:** the complete game in [RULES.md](RULES.md): drops, 24 twists (4 layers and 8 vertical slabs,
 both directions), gravity after every twist, the 76 winning lines, the twist rules R6, R7 and R11, and a
