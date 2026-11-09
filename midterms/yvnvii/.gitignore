@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .env
 *.swp
+*.mov
+*.mp4
+*.m4v
+*.webm

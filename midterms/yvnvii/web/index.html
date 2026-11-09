@@ -40,6 +40,7 @@
   color-scheme: dark;
 }
 
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 * { box-sizing: border-box; }
@@ -100,6 +101,19 @@ button { font: inherit; color: inherit; }
 .dir:hover:not(:disabled) { border-color: var(--slice); }
 .dir:disabled { opacity: .4; cursor: default; }
 .tip { margin: 0; font-size: 13px; color: var(--fg); }
+.tip code, .rp-meta code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.filebtn { text-align: center; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--panel); font-weight: 600; }
+.rp-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 13px; }
+.rp-meta dt { color: var(--muted); }
+.rp-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.rp-now { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.rp-now .src { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; border-radius: 6px; padding: 2px 6px; border: 1px solid var(--line); align-self: flex-start; }
+.rp-now .src.model { border-color: var(--slice); color: var(--slice); }
+.rp-now .src.fallback { border-color: var(--danger); color: var(--danger); }
+.rp-now .rej { color: var(--danger); font-size: 12px; }
+.rp-raw { margin: 0; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 11.5px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent); border-radius: 8px; padding: 8px; }
 .why { margin: 0; font-size: 12px; color: var(--muted); min-height: 1.45em; }
 
 /* layer maps */
@@ -186,10 +200,22 @@ button { font: inherit; color: inherit; }
 
     <div class="card">
       <div class="row">
-        <p class="label">Opponent</p>
+        <p class="label">Mode</p>
         <div class="seg" id="modeSeg">
-          <button type="button" data-v="cpu" aria-pressed="true">Computer</button>
-          <button type="button" data-v="pvp" aria-pressed="false">Two players</button>
+          <button type="button" data-v="cpu" aria-pressed="true" title="You against the computer">Vs computer</button>
+          <button type="button" data-v="pvp" aria-pressed="false" title="Two people take turns">Two players</button>
+          <button type="button" data-v="watch" aria-pressed="false" title="Computer against computer">Watch</button>
+          <button type="button" data-v="replay" aria-pressed="false" title="Replay a game from a trace file">Replay</button>
+        </div>
+      </div>
+      <div class="row" id="watchRow" hidden>
+        <p class="label">X (red) plays at</p>
+        <div class="seg" id="wxSeg">
+          <button type="button" data-v="easy">Easy</button><button type="button" data-v="medium">Medium</button><button type="button" data-v="hard">Hard</button>
+        </div>
+        <p class="label">O (yellow) plays at</p>
+        <div class="seg" id="woSeg">
+          <button type="button" data-v="easy">Easy</button><button type="button" data-v="medium">Medium</button><button type="button" data-v="hard">Hard</button>
         </div>
       </div>
       <div class="row" id="levelRow">
@@ -206,6 +232,30 @@ button { font: inherit; color: inherit; }
           <button type="button" data-v="1" aria-pressed="true">X · red · first</button>
           <button type="button" data-v="2" aria-pressed="false">O · yellow</button>
         </div>
+      </div>
+    </div>
+
+    <div class="card" id="replayCard" hidden>
+      <p class="label">Replay an agent game</p>
+      <p class="tip">Load a trace file written by the Python runner, e.g. <code>results/model-vs-minimax/T1-empty_t1_cand-as-X.jsonl</code> or <code>traces/demo.jsonl</code>. Every move shown was chosen by that player during the real run; this page only replays it.</p>
+      <div class="actions">
+        <label class="btn primary filebtn" for="traceFile">Load trace file…</label>
+        <input type="file" id="traceFile" accept=".jsonl,.json,.txt" hidden>
+        <button class="btn" id="sampleTrace" type="button" title="A minimax vs greedy game from the declared suite">Sample game</button>
+      </div>
+      <p class="why" id="rpError"></p>
+      <div id="rpBody" hidden>
+        <dl class="rp-meta" id="rpMeta"></dl>
+        <div class="actions">
+          <button class="btn" id="rpPlay" type="button">Play</button>
+          <button class="btn" id="rpStep" type="button">Step</button>
+          <button class="btn" id="rpRestart" type="button">Restart</button>
+        </div>
+        <div class="seg" id="rpSpeed">
+          <button type="button" data-v="2400">Slow</button><button type="button" data-v="1400" aria-pressed="true">Normal</button><button type="button" data-v="600">Fast</button>
+        </div>
+        <div class="rp-now" id="rpNow"></div>
+        <pre class="rp-raw" id="rpRaw" hidden></pre>
       </div>
     </div>
 
@@ -395,7 +445,7 @@ function greedyMove(pos) {
 const newPos = () => ({ b: new Int8Array(64), toMove: 1, turn: 1, last: null, result: null });
 let pos = newPos();
 let history = [];    // [{pos (before), a, p}]
-const settings = { mode: "cpu", level: "medium", human: 1 };
+const settings = { mode: "cpu", level: "medium", human: 1, wx: "hard", wo: "medium" };
 const picker = { axis: "layer", k: 0 };
 let busy = false, aiTimer = null, hover = null, previewSlice = false;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -667,7 +717,7 @@ function decideTwist(hit, drag) {
   return { tw: { t: "twist", axis, k, dir }, sd: best.sd, sense, px90: Math.max(90, quarter * 0.85) };
 }
 
-const humanTurn = () => !busy && !pos.result && (settings.mode === "pvp" || pos.toMove === settings.human);
+const humanTurn = () => !busy && !pos.result && (settings.mode === "pvp" || (settings.mode === "cpu" && pos.toMove === settings.human));
 const hintEl = document.querySelector(".hint");
 const HINT = hintEl.textContent;
 let gesture = null;        // { start, hit, plan, slice, block, progress }
@@ -748,21 +798,25 @@ async function act(a, openedSlice = null) {
   render(); maybeComputer();
 }
 
+const levelFor = (p) => settings.mode === "watch" ? (p === 1 ? settings.wx : settings.wo) : settings.level;
 function maybeComputer() {
   clearTimeout(aiTimer);
-  if (settings.mode !== "cpu" || pos.result || pos.toMove === settings.human) return;
+  if (pos.result) return;
+  if (!(settings.mode === "watch" || (settings.mode === "cpu" && pos.toMove !== settings.human))) return;
   busy = true; render();
   aiTimer = setTimeout(() => {
-    const a = settings.level === "easy" ? greedyMove(pos) : searchMove(pos, settings.level === "hard" ? 3 : 2);
+    const lvl = levelFor(pos.toMove);
+    const a = lvl === "easy" ? greedyMove(pos) : searchMove(pos, lvl === "hard" ? 3 : 2);
     busy = false; act(a);
-  }, 420);
+  }, settings.mode === "watch" ? 700 : 420);
 }
 function newGame() {
+  if (settings.mode === "replay") { if (replay.events) replayRestart(); return; }
   clearTimeout(aiTimer); busy = false; falling.splice(0).forEach((f) => f.res()); tweens.splice(0).forEach((t) => { t.step(1); t.res(); });
   clearWin(); pos = newPos(); history = []; rebuild(); updateGhost(); render(); maybeComputer();
 }
 function undo() {
-  if (falling.length || tweens.length) return;
+  if (falling.length || tweens.length || settings.mode === "watch" || settings.mode === "replay") return;
   clearTimeout(aiTimer); busy = false; clearWin();
   const back = () => { const h = history.pop(); if (!h) return false; pos = h.pos; return true; };
   back();
@@ -808,17 +862,135 @@ function bindSeg(id, key, cast = (v) => v) {
   document.getElementById(id).addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     settings[key] = cast(b.dataset.v); syncSegs();
-    if (key === "level") { render(); maybeComputer(); } else newGame();
+    if (key === "level" || key === "wx" || key === "wo") { render(); maybeComputer(); }
+    else if (key === "mode" && settings.mode === "replay") { stopReplay(); clearTimeout(aiTimer); busy = false; if (replay.events) replayRestart(); else { clearWin(); pos = newPos(); history = []; rebuild(); render(); } }
+    else { stopReplay(); newGame(); }
   });
 }
 function syncSegs() {
-  for (const [id, key] of [["modeSeg", "mode"], ["levelSeg", "level"], ["sideSeg", "human"]])
+  for (const [id, key] of [["modeSeg", "mode"], ["levelSeg", "level"], ["sideSeg", "human"], ["wxSeg", "wx"], ["woSeg", "wo"]])
     for (const b of document.getElementById(id).querySelectorAll("button")) b.setAttribute("aria-pressed", String(String(settings[key]) === b.dataset.v));
   for (const b of document.getElementById("axisSeg").querySelectorAll("button")) b.setAttribute("aria-pressed", String(picker.axis === b.dataset.v));
   document.getElementById("levelRow").hidden = settings.mode !== "cpu";
   document.getElementById("sideRow").hidden = settings.mode !== "cpu";
+  document.getElementById("watchRow").hidden = settings.mode !== "watch";
+  document.getElementById("replayCard").hidden = settings.mode !== "replay";
+  document.getElementById("twistCard").hidden = settings.mode === "watch" || settings.mode === "replay";
+  hintEl.textContent = settings.mode === "replay" ? "Replaying a recorded game · drag to look around · scroll or pinch to zoom"
+    : settings.mode === "watch" ? "Computer vs computer · drag to look around · scroll or pinch to zoom" : HINT;
 }
-bindSeg("modeSeg", "mode"); bindSeg("levelSeg", "level"); bindSeg("sideSeg", "human", Number);
+bindSeg("modeSeg", "mode"); bindSeg("levelSeg", "level"); bindSeg("sideSeg", "human", Number); bindSeg("wxSeg", "wx"); bindSeg("woSeg", "wo");
+
+/* ============================ replay a trace from the Python runner ============================
+   The trace is one JSON event per line: start (players, opening), illegal / call_failed, move (player, source, action, raw), end. */
+const SAMPLE_TRACE = "{\"type\": \"start\", \"case\": \"T1-empty\", \"seed\": 2074324692, \"opening\": [], \"players\": {\"1\": \"minimax\", \"2\": \"greedy\"}, \"limits\": {\"step_limit\": 100, \"call_limit\": 110, \"call_timeout_s\": 60.0, \"episode_timeout_s\": 1800.0, \"max_attempts_per_turn\": 2}, \"game_version\": \"unknown\", \"run\": \"sample\", \"date\": \"2026-11-08T22:21:06-05:00\", \"candidate\": \"minimax\", \"opponent\": \"greedy\", \"minimax_depth\": 3, \"model\": null, \"history\": \"none\", \"max_output_tokens\": null}\n{\"type\": \"move\", \"n\": 1, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop D1\", \"placed\": [3, 0, 0], \"search_value\": 11, \"nodes\": 2835}\n{\"type\": \"move\", \"n\": 2, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop D3\", \"placed\": [3, 2, 0]}\n{\"type\": \"move\", \"n\": 3, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop A4\", \"placed\": [0, 3, 0], \"search_value\": 16, \"nodes\": 2582}\n{\"type\": \"move\", \"n\": 4, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop C1\", \"placed\": [2, 0, 0]}\n{\"type\": \"move\", \"n\": 5, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop D4\", \"placed\": [3, 3, 0], \"search_value\": 44, \"nodes\": 2578}\n{\"type\": \"move\", \"n\": 6, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop C3\", \"placed\": [2, 2, 0]}\n{\"type\": \"move\", \"n\": 7, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop B3\", \"placed\": [1, 2, 0], \"search_value\": 50, \"nodes\": 2625}\n{\"type\": \"move\", \"n\": 8, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop C2\", \"placed\": [2, 1, 0]}\n{\"type\": \"move\", \"n\": 9, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop C4\", \"placed\": [2, 3, 0], \"search_value\": 57, \"nodes\": 4587}\n{\"type\": \"move\", \"n\": 10, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop B4\", \"placed\": [1, 3, 0]}\n{\"type\": \"move\", \"n\": 11, \"player\": 1, \"source\": \"baseline\", \"action\": \"twist col B fwd\", \"placed\": null, \"search_value\": 100003, \"nodes\": 6743}\n{\"type\": \"end\", \"outcome\": {\"status\": \"terminal\", \"reason\": \"connect_four\", \"winner\": 1, \"score\": {\"1\": 1, \"2\": -1}}, \"winning_line\": [\"A4 L1\", \"B4 L1\", \"C4 L1\", \"D4 L1\"], \"steps\": 11, \"wall_s\": 0.73, \"players\": {\"1\": {\"name\": \"minimax\", \"moves\": 6, \"fallback_moves\": 0, \"calls\": 0, \"failed_calls\": 0, \"illegal_attempts\": 0, \"input_tokens\": 0, \"output_tokens\": 0, \"latencies\": null, \"mean_latency_s\": 0.121}, \"2\": {\"name\": \"greedy\", \"moves\": 5, \"fallback_moves\": 0, \"calls\": 0, \"failed_calls\": 0, \"illegal_attempts\": 0, \"input_tokens\": 0, \"output_tokens\": 0, \"latencies\": null, \"mean_latency_s\": 0.0}}}";
+const replay = { events: null, names: {}, opening: [], moves: [], end: null, i: 0, playing: false, timer: null, delay: 1400, file: "" };
+function parseActionText(s) {
+  const m = String(s || "").trim().toLowerCase().split(/\s+/);
+  if (m[0] === "drop" && m.length === 2 && m[1].length === 2) {
+    const x = COLS.indexOf(m[1][0].toUpperCase()), y = +m[1][1] - 1;
+    if (x >= 0 && y >= 0 && y < N) return { t: "drop", x, y };
+  }
+  if (m[0] === "twist" && m.length === 4 && DIRS[m[1]] && DIRS[m[1]].includes(m[3])) {
+    const k = m[1] === "col" ? COLS.indexOf(m[2].toUpperCase()) : +m[2] - 1;
+    if (k >= 0 && k < N) return { t: "twist", axis: m[1], k, dir: m[3] };
+  }
+  return null;
+}
+function friendly(name) {
+  if (!name) return "?";
+  if (name.startsWith("model:")) {
+    const [, model, hist, ver] = name.split(":");
+    return `Gemini (${model}${ver ? ", prompt " + ver : ""}${hist && hist !== "none" ? ", with history" : ""})`;
+  }
+  return { minimax: "Minimax baseline", greedy: "Greedy", random: "Random", human: "Human" }[name] || name;
+}
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+function loadTrace(text, fname) {
+  const err = document.getElementById("rpError"); err.textContent = "";
+  let events;
+  try { events = text.split(/\r?\n/).filter((l) => l.trim()).map((l) => JSON.parse(l)); }
+  catch (e) { err.textContent = "That file is not a trace: each line must be one JSON event."; return; }
+  const start = events.find((e) => e.type === "start");
+  if (!start) { err.textContent = "No start event found. Pick a .jsonl trace from results/ or traces/."; return; }
+  const moves = []; let pending = [];
+  for (const e of events) {
+    if (e.type === "illegal" || e.type === "call_failed" || e.type === "limit" || e.type === "error") pending.push(e);
+    else if (e.type === "move") { moves.push({ ...e, before: pending }); pending = []; }
+  }
+  stopReplay();
+  Object.assign(replay, { events, names: start.players || {}, opening: start.opening || [], moves, end: events.find((e) => e.type === "end") || null, i: 0, file: fname, start });
+  settings.mode = "replay"; syncSegs();
+  document.getElementById("rpBody").hidden = false;
+  replayRestart();
+}
+function replayRestart() {
+  stopReplay(); clearTimeout(aiTimer); busy = false; falling.splice(0).forEach((f) => f.res()); tweens.splice(0).forEach((t) => { t.step(1); t.res(); });
+  clearWin(); pos = newPos(); history = [];
+  for (const t of replay.opening) {
+    const a = parseActionText(t), n = a && apply(pos, a);
+    if (!n) { document.getElementById("rpError").textContent = `Opening action "${t}" is not legal here; the trace may be from an older version of the game.`; break; }
+    history.push({ pos, a, p: pos.toMove }); pos = n;
+  }
+  replay.i = 0; rebuild(); updateGhost(); render(); renderReplay(null);
+}
+function stopReplay() { replay.playing = false; clearTimeout(replay.timer); const b = document.getElementById("rpPlay"); if (b) b.textContent = "Play"; }
+async function replayStep() {
+  if (busy || falling.length || tweens.length) return;
+  if (replay.i >= replay.moves.length) { stopReplay(); renderReplay(replay.moves[replay.i - 1] || null); return; }
+  const ev = replay.moves[replay.i], a = parseActionText(ev.action);
+  if (!a || ev.player !== pos.toMove || !apply(pos, a)) {
+    document.getElementById("rpError").textContent = `Move ${replay.i + 1} ("${ev.action}" by ${sym(ev.player)}) does not fit this board; the trace may be from an older version of the game.`;
+    stopReplay(); return;
+  }
+  replay.i++; renderReplay(ev);
+  await act(a);
+  renderReplay(ev);
+  if (replay.playing) replay.timer = setTimeout(replayStep, replay.delay);
+}
+function renderReplay(ev) {
+  if (!replay.events) return;
+  const s = replay.start, n = replay.moves.length;
+  const meta = [["File", `<code>${esc(replay.file)}</code>`], ["X (red)", esc(friendly(replay.names["1"]))], ["O (yellow)", esc(friendly(replay.names["2"]))]];
+  if (s.case) meta.push(["Case", esc(s.case) + (s.seed !== undefined ? ` · seed ${esc(s.seed)}` : "")]);
+  if (replay.opening.length) meta.push(["Opening", `${replay.opening.length} actions from the suite, applied first`]);
+  meta.push(["Progress", `move ${replay.i} of ${n}`]);
+  if (replay.i >= n && replay.end) {
+    const o = replay.end.outcome || {};
+    meta.push(["Result", esc(`${o.winner ? sym(+o.winner) + " won" : "no winner"} · ${o.reason || "?"}`)]);
+  }
+  document.getElementById("rpMeta").innerHTML = meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  const now = document.getElementById("rpNow"), raw = document.getElementById("rpRaw");
+  if (!ev) { now.innerHTML = n ? "Press Play or Step." : "This trace has no moves."; raw.hidden = true; return; }
+  const who = friendly(replay.names[String(ev.player)]);
+  const srcText = ev.source === "model" ? "chosen by the model" : ev.source === "fallback" ? "fallback: substituted by the runner, not a model move" : "chosen by the baseline";
+  const rej = ev.before.map((b) => b.type === "illegal" ? `rejected: ${esc(b.action ? b.action + ": " : "")}${esc(b.reason)}` : b.type === "call_failed" ? `failed call: ${esc(b.error)}` : esc(`${b.type}: ${b.reason || b.error || ""}`));
+  const facts = [ev.latency_s != null ? `${ev.latency_s}s` : "", ev.output_tokens != null ? `${ev.input_tokens}+${ev.output_tokens} tokens` : ""].filter(Boolean).join(" · ");
+  now.innerHTML = `<span class="src ${esc(ev.source)}">${srcText}</span><div><b>${sym(ev.player)} · ${esc(who)}</b>: ${esc(ev.action)}${facts ? ` <span style="color:var(--muted)">(${facts})</span>` : ""}</div>` +
+    rej.map((r) => `<div class="rej">${r}</div>`).join("");
+  if (ev.raw) { raw.hidden = false; raw.textContent = ev.raw; raw.scrollTop = raw.scrollHeight; } else raw.hidden = true;
+}
+document.getElementById("traceFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  loadTrace(await f.text(), f.name); e.target.value = "";
+});
+document.getElementById("sampleTrace").onclick = () => loadTrace(SAMPLE_TRACE, "sample: minimax vs greedy, T1-empty (results/sample)");
+document.getElementById("rpPlay").onclick = () => {
+  if (replay.playing) { stopReplay(); return; }
+  if (replay.i >= replay.moves.length) replayRestart();
+  replay.playing = true; document.getElementById("rpPlay").textContent = "Pause"; replayStep();
+};
+document.getElementById("rpStep").onclick = () => { stopReplay(); replayStep(); };
+document.getElementById("rpRestart").onclick = () => replayRestart();
+document.getElementById("rpSpeed").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return; replay.delay = +b.dataset.v;
+  for (const x of document.getElementById("rpSpeed").querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+});
+stage.addEventListener("dragover", (e) => { e.preventDefault(); });
+stage.addEventListener("drop", async (e) => {
+  e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return;
+  loadTrace(await f.text(), f.name);
+});
 
 /* ============================ panel ============================ */
 const layersEl = document.getElementById("layers");
@@ -856,7 +1028,8 @@ function renderLayers() {
 }
 function render() {
   const disc = document.getElementById("statusDisc"), main = document.getElementById("statusMain"), sub = document.getElementById("statusSub");
-  const who = (p) => settings.mode === "pvp" ? `Player ${sym(p)}` : p === settings.human ? "You" : "Computer";
+  const who = (p) => settings.mode === "pvp" ? `Player ${sym(p)}` : settings.mode === "watch" ? `Computer (${levelFor(p)})`
+    : settings.mode === "replay" ? friendly(replay.names[String(p)]) : p === settings.human ? "You" : "Computer";
   const r = pos.result, lastH = history[history.length - 1];
   if (r && r.winner) {
     disc.className = "disc " + (r.winner === 1 ? "x" : "o"); main.textContent = `${sym(r.winner)} wins`;
@@ -867,7 +1040,9 @@ function render() {
   } else {
     disc.className = "disc " + (pos.toMove === 1 ? "x" : "o"); main.textContent = `${sym(pos.toMove)} to move`;
     const cpu = settings.mode === "cpu" && pos.toMove !== settings.human;
-    sub.textContent = cpu ? `Computer (${settings.level}) is thinking…` : settings.mode === "pvp" ? `Player ${sym(pos.toMove)}: drop or twist` : "Your turn: drop a piece or twist a slice";
+    sub.textContent = settings.mode === "replay" ? (replay.events ? `Replay · ${who(pos.toMove)} to move` : "Load a trace file to replay a game")
+      : settings.mode === "watch" ? `${who(pos.toMove)} is thinking…`
+      : cpu ? `Computer (${settings.level}) is thinking…` : settings.mode === "pvp" ? `Player ${sym(pos.toMove)}: drop or twist` : "Your turn: drop a piece or twist a slice";
   }
   document.getElementById("turnBadge").textContent = r ? `Game over · ${history.length} turns` : `Turn ${pos.turn} / ${TURN_LIMIT}`;
   // twist picker
@@ -887,7 +1062,7 @@ function render() {
   list.innerHTML = history.map((h, k) => `<li><span class="n">${k + 1}.</span><span class="dot ${h.p === 1 ? "x" : "o"}"></span>${sym(h.p)} ${describe(h.a)}</li>`).join("");
   list.scrollTop = list.scrollHeight;
   document.getElementById("movesEmpty").hidden = history.length > 0;
-  document.getElementById("undo").disabled = history.length === 0;
+  document.getElementById("undo").disabled = history.length === 0 || settings.mode === "watch" || settings.mode === "replay";
   renderLayers();
 }
 
@@ -901,7 +1076,7 @@ function start(data = {}) {
 }
 window.claude?.hot?.snapshot?.(() => ({ settings: { ...settings }, actions: history.map((h) => h.a) }));
 window.__twist = { apply, twistBoard, turnCell, settle, children, searchMove, greedyMove, twistBlock, LINES, idx, xyz,
-  get pos() { return pos; }, meshes: () => meshes, act, settings, newGame, newPos,
+  get pos() { return pos; }, meshes: () => meshes, act, settings, newGame, newPos, loadTrace, replay, replayStep,
   project: (x, y, z, dx = 0, dy = 0, dz = 0) => toScreen(cellPos(x, y, z).add(new V3(dx, dy, dz))), camX: () => camera.position.x };
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 </script>
