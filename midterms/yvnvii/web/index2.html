@@ -1,0 +1,1084 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Twist Four</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen game table. The 3D cube fills the stage; a control rail (status, twist controls, layer maps) sits right and stacks below on phones. */
+:root {
+  --bg: #e8ecf1;
+  --stage: #dbe2ea;
+  --panel: #ffffff;
+  --fg: #131b25;
+  --muted: #566376;
+  --line: #ccd5df;
+  --frame: #23272e;      /* black plastic, like a Rubik's cube core */
+  --x: #df3b37;          /* X plays red */
+  --o: #f2b100;          /* O plays yellow */
+  --danger: #c2410c;
+  --slice: #1d4ed8;      /* highlight for the slice about to turn */
+  --focus: #1d4ed8;
+  --font-display: "Big Shoulders Display", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1117; --stage: #121a23; --panel: #17202b; --fg: #e6ebf1; --muted: #93a1b2;
+    --line: #273342; --frame: #2b313b; --x: #ff5c55; --o: #ffc83a; --danger: #fb923c; --slice: #7ea4ff; --focus: #7ea4ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1117; --stage: #121a23; --panel: #17202b; --fg: #e6ebf1; --muted: #93a1b2;
+  --line: #273342; --frame: #2b313b; --x: #ff5c55; --o: #ffc83a; --danger: #fb923c; --slice: #7ea4ff; --focus: #7ea4ff;
+  color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---- stage ---- */
+.stage { position: relative; background: var(--stage); border-radius: 14px; overflow: hidden; min-height: 0; min-width: 0; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.stage canvas.pointing { cursor: pointer; }
+.stage canvas:active { cursor: grabbing; }
+.view-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
+.tool { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; height: 34px; min-width: 34px; padding: 0 10px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.tool:hover { border-color: var(--muted); }
+.turnbadge { position: absolute; top: 12px; left: 12px; font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }
+.hint { position: absolute; left: 12px; bottom: 12px; right: 12px; pointer-events: none; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+/* ---- rail ---- */
+.rail { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: .9; letter-spacing: .01em; text-transform: uppercase; text-wrap: balance; }
+.brand p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+
+.status { display: flex; align-items: center; gap: 12px; }
+.disc { width: 30px; height: 30px; border-radius: 50%; flex: none; box-shadow: inset 0 -3px 0 rgba(0,0,0,.18); }
+.disc.x { background: var(--x); } .disc.o { background: var(--o); } .disc.none { background: var(--line); }
+.status-main { font-family: var(--font-display); font-weight: 700; font-size: 26px; line-height: 1; text-transform: uppercase; }
+.status-sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; border-radius: 6px; padding: 6px 4px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--panel); font-weight: 600; }
+.row { display: flex; flex-direction: column; gap: 6px; }
+.row[hidden] { display: none !important; }
+.actions { display: flex; gap: 8px; }
+.btn { flex: 1; border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 9px 10px; cursor: pointer; font-weight: 600; }
+.btn.primary { background: var(--slice); border-color: var(--slice); color: var(--bg); }
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* twist controls */
+.dirs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dir { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 10px 8px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 600; text-align: center; }
+.dir .glyph { font-size: 22px; line-height: 1; }
+.dir small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.dir:hover:not(:disabled) { border-color: var(--slice); }
+.dir:disabled { opacity: .4; cursor: default; }
+.tip { margin: 0; font-size: 13px; color: var(--fg); }
+.tip code, .rp-meta code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.filebtn { text-align: center; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--panel); font-weight: 600; }
+.rp-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 13px; }
+.rp-meta dt { color: var(--muted); }
+.rp-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.rp-now { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.rp-now .src { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; border-radius: 6px; padding: 2px 6px; border: 1px solid var(--line); align-self: flex-start; }
+.rp-now .src.model { border-color: var(--slice); color: var(--slice); }
+.rp-now .src.fallback { border-color: var(--danger); color: var(--danger); }
+.rp-now .rej { color: var(--danger); font-size: 12px; }
+.rp-raw { margin: 0; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 11.5px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent); border-radius: 8px; padding: 8px; }
+.why { margin: 0; font-size: 12px; color: var(--muted); min-height: 1.45em; }
+
+/* layer maps */
+.layers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.layer h3 { margin: 0 0 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--muted); }
+.grid { display: grid; grid-template-columns: 14px repeat(4, minmax(0, 1fr)); gap: 3px; align-items: center; }
+.grid .ax { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-align: center; }
+.cell { aspect-ratio: 1; max-width: 100%; border: 1px solid var(--line); border-radius: 50%; background: transparent; padding: 0; cursor: pointer; }
+.cell.x { background: var(--x); border-color: var(--x); }
+.cell.o { background: var(--o); border-color: var(--o); }
+.cell.shaft { border-color: var(--fg); }
+.cell.ghost-x { border: 2px dashed var(--x); }
+.cell.ghost-o { border: 2px dashed var(--o); }
+.cell.inslice { box-shadow: 0 0 0 2px color-mix(in srgb, var(--slice) 45%, transparent); }
+.cell.win { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
+
+.moves { margin: 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: 12px;
+  display: flex; flex-direction: column; gap: 2px; max-height: 170px; overflow-y: auto; font-variant-numeric: tabular-nums; }
+.moves li { display: flex; gap: 6px; align-items: center; }
+.moves .n { color: var(--muted); min-width: 2.2em; text-align: right; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dot.x { background: var(--x); } .dot.o { background: var(--o); }
+.empty { color: var(--muted); font-size: 13px; margin: 0; }
+.rules { font-size: 13px; color: var(--muted); margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.rules b { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 520px) { .turnbadge { top: auto; bottom: 40px; } }
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 62vh; min-height: 340px; }
+  .rail { overflow: visible; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <section class="stage" id="stage" aria-label="3D board">
+    <div class="turnbadge" id="turnBadge">Turn 1 / 100</div>
+    <div class="view-tools">
+      <button class="tool" id="rotL" type="button" aria-label="Turn view left">↺ 90°</button>
+      <button class="tool" id="rotR" type="button" aria-label="Turn view right">↻ 90°</button>
+      <button class="tool" id="resetView" type="button">Reset view</button>
+    </div>
+    <div class="hint">Click the cube to drop in that column · drag across the cube to twist · drag outside it to look around</div>
+  </section>
+
+  <aside class="rail">
+    <header class="brand">
+      <h1>Twist Four</h1>
+      <p>Connect Four inside a 4 × 4 × 4 Rubik's cube. Drop pieces, or twist a slice and let gravity do the rest.</p>
+    </header>
+
+    <div class="card" aria-live="polite">
+      <div class="status">
+        <div class="disc x" id="statusDisc"></div>
+        <div>
+          <div class="status-main" id="statusMain">X to move</div>
+          <div class="status-sub" id="statusSub">Your turn</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="newGame" type="button">New game</button>
+        <button class="btn" id="undo" type="button">Undo</button>
+      </div>
+    </div>
+
+    <div class="card" id="twistCard">
+      <p class="label">Or use your turn to twist</p>
+      <p class="tip">Drag across the cube like a Rubik's cube: sideways turns a layer, up or down turns a slab. Or pick a slice here:</p>
+      <div class="seg" id="axisSeg">
+        <button type="button" data-v="layer" aria-pressed="true">Layer</button>
+        <button type="button" data-v="col" aria-pressed="false">A–D slab</button>
+        <button type="button" data-v="row" aria-pressed="false">1–4 slab</button>
+      </div>
+      <div class="seg" id="indexSeg"></div>
+      <div class="dirs">
+        <button class="dir" id="dirA" type="button"><span class="glyph" id="glyphA">↻</span><span id="nameA">Clockwise</span><small id="noteA">seen from above</small></button>
+        <button class="dir" id="dirB" type="button"><span class="glyph" id="glyphB">↺</span><span id="nameB">Counter-clockwise</span><small id="noteB">seen from above</small></button>
+      </div>
+      <p class="why" id="why"></p>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <p class="label">Mode</p>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-v="cpu" aria-pressed="true" title="You against the computer">Vs computer</button>
+          <button type="button" data-v="pvp" aria-pressed="false" title="Two people take turns">Two players</button>
+          <button type="button" data-v="watch" aria-pressed="false" title="Computer against computer">Watch</button>
+          <button type="button" data-v="replay" aria-pressed="false" title="Replay a game from a trace file">Replay</button>
+        </div>
+      </div>
+      <div class="row" id="watchRow" hidden>
+        <p class="label">X (red) plays at</p>
+        <div class="seg" id="wxSeg">
+          <button type="button" data-v="easy">Easy</button><button type="button" data-v="medium">Medium</button><button type="button" data-v="hard">Hard</button>
+        </div>
+        <p class="label">O (yellow) plays at</p>
+        <div class="seg" id="woSeg">
+          <button type="button" data-v="easy">Easy</button><button type="button" data-v="medium">Medium</button><button type="button" data-v="hard">Hard</button>
+        </div>
+      </div>
+      <div class="row" id="levelRow">
+        <p class="label">Computer strength</p>
+        <div class="seg" id="levelSeg">
+          <button type="button" data-v="easy" aria-pressed="false" title="Takes a win or blocks a drop one move ahead">Easy</button>
+          <button type="button" data-v="medium" aria-pressed="true" title="Searches 2 turns ahead, drops and twists">Medium</button>
+          <button type="button" data-v="hard" aria-pressed="false" title="Searches 3 turns ahead, drops and twists">Hard</button>
+        </div>
+      </div>
+      <div class="row" id="sideRow">
+        <p class="label">You play</p>
+        <div class="seg" id="sideSeg">
+          <button type="button" data-v="1" aria-pressed="true">X · red · first</button>
+          <button type="button" data-v="2" aria-pressed="false">O · yellow</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="replayCard" hidden>
+      <p class="label">Replay an agent game</p>
+      <p class="tip">Load a trace file written by the Python runner, e.g. <code>results/model-vs-minimax/T1-empty_t1_cand-as-X.jsonl</code> or <code>traces/demo.jsonl</code>. Every move shown was chosen by that player during the real run; this page only replays it.</p>
+      <div class="actions">
+        <label class="btn primary filebtn" for="traceFile">Load trace file…</label>
+        <input type="file" id="traceFile" accept=".jsonl,.json,.txt" hidden>
+        <button class="btn" id="sampleTrace" type="button" title="A minimax vs greedy game from the declared suite">Sample game</button>
+      </div>
+      <p class="why" id="rpError"></p>
+      <div id="rpBody" hidden>
+        <dl class="rp-meta" id="rpMeta"></dl>
+        <div class="actions">
+          <button class="btn" id="rpPlay" type="button">Play</button>
+          <button class="btn" id="rpStep" type="button">Step</button>
+          <button class="btn" id="rpRestart" type="button">Restart</button>
+        </div>
+        <div class="seg" id="rpSpeed">
+          <button type="button" data-v="2400">Slow</button><button type="button" data-v="1400" aria-pressed="true">Normal</button><button type="button" data-v="600">Fast</button>
+        </div>
+        <div class="rp-now" id="rpNow"></div>
+        <pre class="rp-raw" id="rpRaw" hidden></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="label">Layers, seen from above</p>
+      <div class="layers" id="layers"></div>
+    </div>
+
+    <div class="card">
+      <p class="label">Moves</p>
+      <ol class="moves" id="moves"></ol>
+      <p class="empty" id="movesEmpty">No moves yet.</p>
+    </div>
+
+    <div class="card">
+      <p class="label">Rules</p>
+      <ul class="rules">
+        <li>On your turn, either <b>drop</b> a piece into one of 16 shafts, or <b>twist</b> one slice of the cube 90°.</li>
+        <li>A slice is a <b>horizontal layer</b> (turns around the vertical axis) or a <b>vertical slab</b> of shafts (A–D or 1–4). After a twist, <b>gravity</b> pulls every piece down its shaft.</li>
+        <li>Twist as often as you like, but a twist <b>must change the board</b>, and you <b>can't undo</b> the twist your opponent just made.</li>
+        <li><b>Four in a line</b> wins, in any of the 76 lines. If a twist makes lines for both players, the twister wins; if only for the opponent, the opponent wins.</li>
+        <li>No winner after <b>100 turns</b>: draw.</li>
+      </ul>
+    </div>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+/* ============================ rules ============================
+   Cell (x, y, z): x = column A-D, y = row 1-4 (row 1 at the front), z = layer 1-4 (layer 1 at the bottom).
+   Actions: {t:"drop", x, y} or {t:"twist", axis:"layer"|"col"|"row", k:0-3, dir}.  */
+const N = 4, COLS = "ABCD", TURN_LIMIT = 100;
+const idx = (x, y, z) => x + 4 * y + 16 * z;
+const xyz = (i) => [i % 4, Math.floor(i / 4) % 4, Math.floor(i / 16)];
+const shaftName = (x, y) => COLS[x] + (y + 1);
+
+const LINES = (() => {
+  const seen = new Map();
+  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) for (let z = 0; z < N; z++)
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      if (!dx && !dy && !dz) continue;
+      const cells = [];
+      for (let k = 0; k < N; k++) {
+        const a = x + k * dx, b = y + k * dy, c = z + k * dz;
+        if (a < 0 || a >= N || b < 0 || b >= N || c < 0 || c >= N) break;
+        cells.push(idx(a, b, c));
+      }
+      if (cells.length === N) { cells.sort((p, q) => p - q); seen.set(cells.join(","), cells); }
+    }
+  return [...seen.values()];
+})();
+const THROUGH = Array.from({ length: 64 }, () => []);
+LINES.forEach((l) => l.forEach((c) => THROUGH[c].push(l)));
+console.assert(LINES.length === 76, "expected 76 lines");
+
+const DIRS = { layer: ["cw", "ccw"], col: ["fwd", "back"], row: ["left", "right"] };
+const INVERSE = { cw: "ccw", ccw: "cw", fwd: "back", back: "fwd", left: "right", right: "left" };
+const inSlice = (x, y, z, tw) => (tw.axis === "layer" ? z : tw.axis === "col" ? x : y) === tw.k;
+// where cell (x, y, z) of the slice goes when it turns 90 degrees
+function turnCell(x, y, z, tw) {
+  switch (tw.dir) {
+    case "cw":    return [y, 3 - x, z];      // layer, clockwise seen from above
+    case "ccw":   return [3 - y, x, z];
+    case "fwd":   return [x, 3 - z, y];      // A-D slab, top tips toward row 1 (the front)
+    case "back":  return [x, z, 3 - y];
+    case "left":  return [3 - z, y, x];      // 1-4 slab, top tips toward column A
+    case "right": return [z, y, 3 - x];
+  }
+}
+function settle(b) {   // gravity: every shaft keeps its order and drops to the bottom
+  const o = new Int8Array(64);
+  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
+    let w = 0;
+    for (let z = 0; z < N; z++) { const v = b[idx(x, y, z)]; if (v) o[idx(x, y, w++)] = v; }
+  }
+  return o;
+}
+function twistBoard(b, tw) {
+  const t = new Int8Array(64);
+  for (let i = 0; i < 64; i++) {
+    const v = b[i]; if (!v) continue;
+    const [x, y, z] = xyz(i);
+    if (inSlice(x, y, z, tw)) { const [a, c, d] = turnCell(x, y, z, tw); t[idx(a, c, d)] = v; } else t[i] = v;
+  }
+  return settle(t);
+}
+const height = (b, x, y) => { let h = 0; while (h < N && b[idx(x, y, h)]) h++; return h; };
+const lineFor = (b, p) => LINES.find((l) => l.every((c) => b[c] === p)) || null;
+const same = (a, b) => { for (let i = 0; i < 64; i++) if (a[i] !== b[i]) return false; return true; };
+const SHAFTS = []; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) SHAFTS.push([x, y]);
+const CENTER = [...SHAFTS].sort((a, b) => (Math.abs(a[0] - 1.5) + Math.abs(a[1] - 1.5)) - (Math.abs(b[0] - 1.5) + Math.abs(b[1] - 1.5)));
+const ALL_TWISTS = []; for (const axis of ["layer", "col", "row"]) for (let k = 0; k < N; k++) for (const dir of DIRS[axis]) ALL_TWISTS.push({ t: "twist", axis, k, dir });
+
+/* Why a twist is not allowed right now (null if it is). */
+function twistBlock(pos, tw) {
+  const l = pos.last;
+  if (l && l.t === "twist" && l.axis === tw.axis && l.k === tw.k && INVERSE[l.dir] === tw.dir) return "That would undo your opponent's last twist.";
+  if (same(twistBoard(pos.b, tw), pos.b)) return "That twist would not change the board.";
+  return null;
+}
+/* Apply one action to a position. Returns the next position, or null if illegal. */
+function apply(pos, a) {
+  const p = pos.toMove, q = 3 - p;
+  let b, result = null;
+  if (a.t === "drop") {
+    const z = height(pos.b, a.x, a.y);
+    if (z >= N) return null;
+    b = pos.b.slice(); const i = idx(a.x, a.y, z); b[i] = p;
+    const l = THROUGH[i].find((ln) => ln.every((c) => b[c] === p));
+    if (l) result = { winner: p, line: l, reason: "connect_four" };
+  } else {
+    const l = pos.last;
+    if (l && l.t === "twist" && l.axis === a.axis && l.k === a.k && INVERSE[l.dir] === a.dir) return null;
+    b = twistBoard(pos.b, a);
+    if (same(b, pos.b)) return null;
+    const lp = lineFor(b, p), lq = lineFor(b, q);
+    if (lp) result = { winner: p, line: lp, reason: "connect_four" };          // both, or only the twister: twister wins
+    else if (lq) result = { winner: q, line: lq, reason: "connect_four" };     // only the opponent: opponent wins
+  }
+  const turn = pos.turn + 1;
+  if (!result && turn > TURN_LIMIT) result = { winner: null, line: null, reason: "turn_limit" };
+  return { b, toMove: result ? p : q, turn, last: a, result };
+}
+function children(pos) {
+  const out = [];
+  for (const [x, y] of CENTER) { const a = { t: "drop", x, y }, n = apply(pos, a); if (n) out.push([a, n]); }
+  for (const a of ALL_TWISTS) { const n = apply(pos, a); if (n) out.push([a, n]); }
+  return out;
+}
+
+/* ============================ computer ============================ */
+const W = [0, 1, 6, 40];
+function evaluate(b, me) {
+  const opp = 3 - me; let s = 0;
+  for (const l of LINES) {
+    let m = 0, t = 0;
+    for (const c of l) { const v = b[c]; if (v === me) m++; else if (v === opp) t++; }
+    if (m && !t) s += W[m]; else if (t && !m) s -= W[t];
+  }
+  return s;
+}
+const scoreResult = (r, me, depth) => r.winner === me ? 100000 + depth : r.winner === null ? 0 : -(100000 + depth);
+function negamax(pos, depth, alpha, beta) {
+  const me = pos.toMove;
+  if (depth === 0) return evaluate(pos.b, me);
+  const kids = children(pos);
+  if (!kids.length) return 0;
+  let best = -1e9;
+  for (const [, n] of kids) {
+    const v = n.result ? scoreResult(n.result, me, depth) : -negamax(n, depth - 1, -beta, -alpha);
+    if (v > best) best = v;
+    if (v > alpha) alpha = v;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+function searchMove(pos, depth) {
+  const me = pos.toMove; let best = [], bestVal = -1e9, alpha = -1e9;
+  for (const [a, n] of children(pos)) {
+    const v = n.result ? scoreResult(n.result, me, depth) : -negamax(n, depth - 1, -1e9, -(alpha - 1));  // alpha-1: ties searched exactly
+    if (v > bestVal) { best = [a]; bestVal = v; } else if (v === bestVal) best.push(a);
+    if (v > alpha) alpha = v;
+  }
+  return best[Math.floor(Math.random() * best.length)];
+}
+function greedyMove(pos) {
+  const kids = children(pos), me = pos.toMove;
+  const win = kids.find(([, n]) => n.result && n.result.winner === me);
+  if (win) return win[0];
+  const asOpp = { ...pos, toMove: 3 - me, last: null };
+  for (const [a, n] of children(asOpp)) if (a.t === "drop" && n.result && n.result.winner === 3 - me && height(pos.b, a.x, a.y) < N) return a;
+  const drops = kids.filter(([a, n]) => a.t === "drop" && !(n.result && n.result.winner === 3 - me));
+  const pool = drops.length ? drops : kids;
+  return pool[Math.floor(Math.random() * pool.length)][0];
+}
+
+/* ============================ state + settings ============================ */
+const newPos = () => ({ b: new Int8Array(64), toMove: 1, turn: 1, last: null, result: null });
+let pos = newPos();
+let history = [];    // [{pos (before), a, p}]
+const settings = { mode: "cpu", level: "medium", human: 1, wx: "hard", wo: "medium" };
+const picker = { axis: "layer", k: 0 };
+let busy = false, aiTimer = null, hover = null, previewSlice = false;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sym = (p) => (p === 1 ? "X" : "O");
+const cellName = (i) => { const [x, y, z] = xyz(i); return `${shaftName(x, y)} L${z + 1}`; };
+const AXIS_WORD = { layer: "layer", col: "slab", row: "slab" };
+const DIR_WORD = { cw: "clockwise", ccw: "counter-clockwise", fwd: "tip forward", back: "tip back", left: "tip left", right: "tip right" };
+const sliceName = (axis, k) => axis === "layer" ? `layer ${k + 1}` : axis === "col" ? `slab ${COLS[k]}` : `slab ${k + 1}`;
+const describe = (a) => a.t === "drop" ? `drops in ${shaftName(a.x, a.y)}` : `twists ${sliceName(a.axis, a.k)} ${DIR_WORD[a.dir]}`;
+
+/* ============================ 3D scene: a Rubik's-style cube of cubelets ============================ */
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.setClearColor(0x000000, 0);
+stage.prepend(renderer.domElement);
+const canvas = renderer.domElement;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+const TARGET = new THREE.Vector3(0, 2.0, 0), HOME = new THREE.Vector3(5.9, 6.6, 8.4);
+camera.position.copy(HOME);
+const controls = new OrbitControls(camera, canvas);
+controls.target.copy(TARGET);
+Object.assign(controls, { enablePan: false, enableDamping: true, dampingFactor: 0.08, minDistance: 6, maxDistance: 18, minPolarAngle: 0.12, maxPolarAngle: Math.PI / 2 - 0.04 });
+controls.update();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404858, 1.35));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(4, 10, 7); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-6, 3, -4); scene.add(fill);
+
+const FLOOR = 0.1, CUBE = 0.94;
+const px = (x) => x - 1.5, pz = (y) => 1.5 - y, py = (z) => FLOOR + 0.5 + z;
+const cellPos = (x, y, z) => new THREE.Vector3(px(x), py(z), pz(y));
+const V3 = THREE.Vector3, AXES = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
+
+function stickerTexture(color) {
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = "#0b0d10"; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = color; g.beginPath(); g.roundRect(16, 16, 224, 224, 36); g.fill();
+  const hl = g.createLinearGradient(0, 16, 0, 240); hl.addColorStop(0, "rgba(255,255,255,.22)"); hl.addColorStop(.5, "rgba(255,255,255,0)");
+  g.fillStyle = hl; g.beginPath(); g.roundRect(16, 16, 224, 224, 36); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+const mats = {
+  base: new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 }),
+  x: new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.0 }),
+  o: new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.0 }),
+  glass: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.035, depthWrite: false }),
+  glassEdge: new THREE.LineBasicMaterial({ transparent: true, opacity: 0.22 }),
+  ghost: new THREE.MeshStandardMaterial({ roughness: 0.4, transparent: true, opacity: 0.4, depthWrite: false }),
+  slice: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.12, depthWrite: false }),
+  sliceEdge: new THREE.LineBasicMaterial({ transparent: true, opacity: 0.9 }),
+  winLine: new THREE.MeshBasicMaterial(),
+};
+const base = new THREE.Mesh(new THREE.BoxGeometry(4.7, 0.2, 4.7), mats.base); base.position.y = 0; scene.add(base);
+
+const cubeGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
+const glassEdgeGeo = new THREE.EdgesGeometry(cubeGeo);
+const glass = [];          // 64 clear cells; also the click / drag targets
+for (let i = 0; i < 64; i++) {
+  const g = new THREE.Mesh(cubeGeo, mats.glass);
+  g.add(new THREE.LineSegments(glassEdgeGeo, mats.glassEdge));
+  g.position.copy(cellPos(...xyz(i))); g.userData.i = i; scene.add(g); glass.push(g);
+}
+
+const labelSprites = [];
+function makeLabel(text, scale = 0.5) {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.userData = { text, c, tex }; sp.scale.set(scale, scale, 1); labelSprites.push(sp); return sp;
+}
+function paintLabels() {
+  const fg = css("--fg");
+  for (const sp of labelSprites) {
+    const { c, text, tex } = sp.userData, g = c.getContext("2d");
+    g.clearRect(0, 0, 128, 128); g.fillStyle = fg; g.font = "600 70px 'IBM Plex Mono', monospace";
+    g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 64, 68); tex.needsUpdate = true;
+  }
+}
+for (let x = 0; x < N; x++) { const s = makeLabel(COLS[x]); s.position.set(px(x), 0.2, pz(0) + 0.95); scene.add(s); }
+for (let y = 0; y < N; y++) { const s = makeLabel(String(y + 1)); s.position.set(px(0) - 0.95, 0.2, pz(y)); scene.add(s); }
+for (let z = 0; z < N; z++) { const s = makeLabel("L" + (z + 1), 0.42); s.position.set(px(3) + 0.9, py(z), pz(3) - 0.9); scene.add(s); }
+
+const ghost = new THREE.Mesh(cubeGeo, mats.ghost); ghost.visible = false; scene.add(ghost);
+const shaftBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, N, 1)), mats.sliceEdge);
+shaftBox.visible = false; scene.add(shaftBox);
+
+// translucent box around the slice a twist will turn
+const sliceBox = new THREE.Group();
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+sliceBox.add(new THREE.Mesh(unitBox, mats.slice), new THREE.LineSegments(new THREE.EdgesGeometry(unitBox), mats.sliceEdge));
+sliceBox.visible = false; scene.add(sliceBox);
+function sliceCenter(axis, k) {
+  if (axis === "layer") return new V3(0, py(k), 0);
+  if (axis === "col") return new V3(px(k), py(1.5), 0);
+  return new V3(0, py(1.5), pz(k));
+}
+function placeSliceBox(axis, k) {
+  sliceBox.position.copy(sliceCenter(axis, k)); sliceBox.rotation.set(0, 0, 0);
+  const s = 4.06, t = 1.02;
+  sliceBox.scale.set(axis === "col" ? t : s, axis === "layer" ? t : s, axis === "row" ? t : s);
+}
+let sliceTint = "--slice";
+function tintSlice(token) { sliceTint = token; mats.slice.color.set(css(token)); mats.sliceEdge.color.set(css(token)); }
+
+let meshes = new Map();      // cell index -> piece mesh
+let winCells = [], winObjects = [];
+const falling = [];
+
+function applyTheme() {
+  mats.base.color.set(css("--frame"));
+  mats.x.map?.dispose(); mats.x.map = stickerTexture(css("--x")); mats.x.needsUpdate = true;
+  mats.o.map?.dispose(); mats.o.map = stickerTexture(css("--o")); mats.o.needsUpdate = true;
+  mats.glass.color.set(css("--fg")); mats.glassEdge.color.set(css("--fg"));
+  mats.winLine.color.set(css("--fg"));
+  tintSlice(sliceTint);
+  paintLabels(); updateGhost();
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = camera.aspect < 0.9 ? 54 : 40; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+
+let viewTurn = null;
+function turnView(angle) {
+  const off = camera.position.clone().sub(controls.target);
+  viewTurn = { from: Math.atan2(off.x, off.z), to: Math.atan2(off.x, off.z) + angle, t0: performance.now() - (reduceMotion ? 1000 : 0), r: Math.hypot(off.x, off.z), y: off.y };
+}
+document.getElementById("rotL").onclick = () => turnView(-Math.PI / 2);
+document.getElementById("rotR").onclick = () => turnView(Math.PI / 2);
+document.getElementById("resetView").onclick = () => { viewTurn = null; camera.position.copy(HOME); controls.target.copy(TARGET); controls.update(); };
+
+/* ============================ animation helpers ============================ */
+const tweens = [];
+const tween = (ms, step) => new Promise((res) => { if (reduceMotion) { step(1); res(); } else tweens.push({ t0: performance.now(), ms, step, res }); });
+const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+function addMesh(p, x, y, z, fromTop) {
+  const m = new THREE.Mesh(cubeGeo, p === 1 ? mats.x : mats.o);
+  m.position.copy(cellPos(x, y, z));
+  if (fromTop && !reduceMotion) m.position.y = py(N) + 1.2;
+  scene.add(m); meshes.set(idx(x, y, z), m); return m;
+}
+const fall = (m, targetY) => m.position.y <= targetY + 1e-4 || reduceMotion ? (m.position.y = targetY, Promise.resolve())
+  : new Promise((res) => falling.push({ mesh: m, target: targetY, v: 0, res }));
+function rebuild() {
+  for (const m of meshes.values()) scene.remove(m);
+  meshes = new Map();
+  for (let i = 0; i < 64; i++) if (pos.b[i]) { const [x, y, z] = xyz(i); addMesh(pos.b[i], x, y, z, false); }
+}
+function clearWin() { winObjects.forEach((o) => scene.remove(o)); winObjects = []; for (const i of winCells) meshes.get(i)?.scale.setScalar(1); winCells = []; }
+function showWin(line) {
+  winCells = line;
+  const [a, b] = [line[0], line[3]].map((i) => cellPos(...xyz(i)));
+  const dir = b.clone().sub(a), len = dir.length();
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, len + 0.8, 16), mats.winLine);
+  bar.position.copy(a.clone().add(b).multiplyScalar(0.5));
+  bar.quaternion.setFromUnitVectors(new V3(0, 1, 0), dir.normalize());
+  scene.add(bar); winObjects.push(bar);
+}
+async function animateDrop(p, x, y, z) { await fall(addMesh(p, x, y, z, true), py(z)); }
+
+/* ---- slices: open (group the cubelets), turn, close (commit or cancel) ---- */
+const axisVecOf = (axis) => AXES[axis === "col" ? 0 : axis === "layer" ? 1 : 2];
+// the world rotation (+90 or -90 degrees) that matches turnCell for this twist
+function angleFor(tw) {
+  const center = sliceCenter(tw.axis, tw.k), av = axisVecOf(tw.axis);
+  const probe = tw.axis === "layer" ? [0, 0, tw.k] : tw.axis === "col" ? [tw.k, 0, 0] : [0, tw.k, 0];
+  const want = cellPos(...turnCell(...probe, tw));
+  const err = (ang) => cellPos(...probe).sub(center).applyAxisAngle(av, ang).add(center).distanceTo(want);
+  return err(Math.PI / 2) < err(-Math.PI / 2) ? Math.PI / 2 : -Math.PI / 2;
+}
+function openSlice(axis, k) {
+  const s = { axis, k, axisVec: axisVecOf(axis), angle: 0, pivot: new THREE.Group(), pieces: [], cells: [] };
+  s.pivot.position.copy(sliceCenter(axis, k)); scene.add(s.pivot);
+  for (const [i, m] of meshes) if (inSlice(...xyz(i), s)) { s.pivot.attach(m); s.pieces.push([i, m]); }
+  for (const g of glass) if (inSlice(...xyz(g.userData.i), s)) { s.pivot.attach(g); s.cells.push(g); }
+  placeSliceBox(axis, k); sliceBox.visible = true; s.pivot.attach(sliceBox);
+  return s;
+}
+function setSliceAngle(s, ang) { s.angle = ang; s.pivot.setRotationFromAxisAngle(s.axisVec, ang); }
+async function closeSlice(s, tw) {
+  const from = s.angle, to = tw ? angleFor(tw) : 0;
+  const ms = Math.max(140, 460 * Math.abs(to - from) / (Math.PI / 2));
+  await tween(ms, (k) => setSliceAngle(s, from + (to - from) * ease(k)));
+  for (const g of s.cells) { scene.attach(g); g.rotation.set(0, 0, 0); g.position.copy(cellPos(...xyz(g.userData.i))); }
+  scene.attach(sliceBox); sliceBox.visible = false; tintSlice("--slice");
+  if (!tw) {
+    for (const [i, m] of s.pieces) { scene.attach(m); m.rotation.set(0, 0, 0); m.position.copy(cellPos(...xyz(i))); }
+    scene.remove(s.pivot); return;
+  }
+  // snap turned pieces onto their new cells, then gravity
+  const moved = new Set(s.pieces.map(([i]) => i)), turned = new Map();
+  for (const [i, m] of meshes) {
+    if (moved.has(i)) { const c = turnCell(...xyz(i), tw); scene.attach(m); m.rotation.set(0, 0, 0); m.position.copy(cellPos(...c)); turned.set(idx(...c), m); }
+    else turned.set(i, m);
+  }
+  scene.remove(s.pivot);
+  meshes = new Map(); const drops = [];
+  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
+    let w = 0;
+    for (let z = 0; z < N; z++) { const m = turned.get(idx(x, y, z)); if (m) { meshes.set(idx(x, y, w), m); drops.push(fall(m, py(w))); w++; } }
+  }
+  await Promise.all(drops);
+}
+
+const clock = new THREE.Clock();
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05), now = performance.now();
+  for (let k = falling.length - 1; k >= 0; k--) {
+    const f = falling[k]; f.v += 30 * dt; f.mesh.position.y -= f.v * dt;
+    if (f.mesh.position.y <= f.target) { f.mesh.position.y = f.target; falling.splice(k, 1); f.res(); }
+  }
+  for (let k = tweens.length - 1; k >= 0; k--) {
+    const t = tweens[k], p = Math.min(1, (now - t.t0) / t.ms); t.step(p);
+    if (p >= 1) { tweens.splice(k, 1); t.res(); }
+  }
+  if (viewTurn) {
+    const k = Math.min(1, (now - viewTurn.t0) / 380), e = 1 - Math.pow(1 - k, 3), a = viewTurn.from + (viewTurn.to - viewTurn.from) * e;
+    camera.position.set(controls.target.x + viewTurn.r * Math.sin(a), controls.target.y + viewTurn.y, controls.target.z + viewTurn.r * Math.cos(a));
+    if (k >= 1) viewTurn = null;
+  }
+  if (winCells.length && !reduceMotion) { const s = 1 + 0.07 * Math.sin(now / 180); for (const i of winCells) meshes.get(i)?.scale.setScalar(s); }
+  controls.update(); renderer.render(scene, camera); requestAnimationFrame(frame);
+}
+
+/* ============================ input: click to drop, drag across the cube to twist ============================ */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function pick(e) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObjects(glass, false)[0];
+  if (!h) return null;
+  const [x, y, z] = xyz(h.object.userData.i);
+  return { x, y, z, point: h.point.clone(), normal: h.face.normal.clone().round() };
+}
+function toScreen(v) {
+  const p = v.clone().project(camera), r = canvas.getBoundingClientRect();
+  return new THREE.Vector2((p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height);
+}
+// Turn a drag that started on face `hit` into a twist: which slice, which way, and how far one quarter-turn is on screen.
+function decideTwist(hit, drag) {
+  const p0 = toScreen(hit.point);
+  let best = null;
+  for (const a of AXES) {
+    if (Math.abs(a.dot(hit.normal)) > 0.5) continue;
+    const sd = toScreen(hit.point.clone().addScaledVector(a, 0.5)).sub(p0);
+    if (sd.length() < 1e-3) continue;
+    sd.normalize();
+    const d = drag.dot(sd);
+    if (!best || Math.abs(d) > Math.abs(best.d)) best = { a, sd, d };
+  }
+  if (!best) return null;
+  const rot = new V3().crossVectors(hit.normal, best.a);
+  const ai = Math.abs(rot.x) > 0.5 ? 0 : Math.abs(rot.y) > 0.5 ? 1 : 2;
+  const axis = ai === 0 ? "col" : ai === 1 ? "layer" : "row";
+  const k = ai === 0 ? hit.x : ai === 1 ? hit.z : hit.y;
+  const center = sliceCenter(axis, k), av = AXES[ai];
+  const sense = Math.sign(best.d) || 1;                 // which way along sd the finger moves
+  const nudged = toScreen(hit.point.clone().sub(center).applyAxisAngle(av, 0.15).add(center)).sub(p0);
+  const worldSign = (Math.sign(nudged.dot(best.sd)) || 1) * sense;
+  const dir = DIRS[axis].find((d) => Math.sign(angleFor({ axis, k, dir: d })) === worldSign);
+  const quarter = toScreen(hit.point.clone().sub(center).applyAxisAngle(av, worldSign * Math.PI / 2).add(center)).distanceTo(p0);
+  return { tw: { t: "twist", axis, k, dir }, sd: best.sd, sense, px90: Math.max(90, quarter * 0.85) };
+}
+
+const humanTurn = () => !busy && !pos.result && (settings.mode === "pvp" || (settings.mode === "cpu" && pos.toMove === settings.human));
+const hintEl = document.querySelector(".hint");
+const HINT = hintEl.textContent;
+let gesture = null;        // { start, hit, plan, slice, block, progress }
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!humanTurn()) return;
+  const hit = pick(e);
+  if (!hit) return;                                   // off the cube: let the view rotate
+  controls.enabled = false;
+  gesture = { id: e.pointerId, start: new THREE.Vector2(e.clientX, e.clientY), t: performance.now(), hit, plan: null, slice: null, block: null, progress: 0, type: e.pointerType };
+  canvas.setPointerCapture(e.pointerId);
+}, { capture: true });
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!gesture) { if (e.pointerType === "mouse" && !e.buttons) setHover(pick(e)); return; }
+  if (e.pointerId !== gesture.id) return;
+  const drag = new THREE.Vector2(e.clientX, e.clientY).sub(gesture.start);
+  if (!gesture.plan) {
+    if (drag.length() < 10) return;
+    gesture.plan = decideTwist(gesture.hit, drag);
+    if (!gesture.plan) return;
+    setHover(null);
+    gesture.block = twistBlock(pos, gesture.plan.tw);
+    gesture.slice = openSlice(gesture.plan.tw.axis, gesture.plan.tw.k);
+    tintSlice(gesture.block ? "--danger" : "--slice");
+  }
+  const { plan } = gesture;
+  const raw = Math.max(0, (drag.dot(plan.sd) * plan.sense) / plan.px90);
+  gesture.progress = gesture.block ? Math.min(raw, 1) * 0.12 : Math.min(raw, 1);
+  setSliceAngle(gesture.slice, angleFor(plan.tw) * gesture.progress);
+  const name = `Twist ${sliceName(plan.tw.axis, plan.tw.k)} ${DIR_WORD[plan.tw.dir]}`;
+  hintEl.textContent = gesture.block ? `${name}: not allowed. ${gesture.block}` : gesture.progress >= 0.35 ? `${name}: release to twist` : `${name}: keep dragging, or go back to cancel`;
+});
+
+async function endGesture(e) {
+  if (!gesture || e.pointerId !== gesture.id) return;
+  const g = gesture; gesture = null; controls.enabled = true; hintEl.textContent = HINT;
+  if (!g.plan) {                                      // a click or tap: drop into that shaft
+    if (e.type === "pointercancel") return;
+    const s = { x: g.hit.x, y: g.hit.y };
+    if (g.type === "mouse" || (hover && hover.x === s.x && hover.y === s.y)) human({ t: "drop", ...s });
+    else setHover(s);
+    return;
+  }
+  if (!g.block && g.progress >= 0.35 && e.type !== "pointercancel") act(g.plan.tw, g.slice);
+  else { busy = true; await closeSlice(g.slice, null); busy = false; render(); }
+}
+canvas.addEventListener("pointerup", endGesture);
+canvas.addEventListener("pointercancel", endGesture);
+canvas.addEventListener("pointerleave", (e) => { if (!gesture && e.pointerType === "mouse") setHover(null); });
+
+function setHover(s) {
+  hover = s ? { x: s.x, y: s.y } : null;
+  canvas.classList.toggle("pointing", !!s && humanTurn());
+  updateGhost(); renderLayers();
+}
+function updateGhost() {
+  if (!hover || busy) { ghost.visible = shaftBox.visible = false; return; }
+  shaftBox.position.set(px(hover.x), py(1.5), pz(hover.y)); shaftBox.visible = true;
+  const z = height(pos.b, hover.x, hover.y);
+  if (!humanTurn() || z >= N) { ghost.visible = false; return; }
+  mats.ghost.color.set(css(pos.toMove === 1 ? "--x" : "--o"));
+  ghost.position.copy(cellPos(hover.x, hover.y, z)); ghost.visible = true;
+}
+
+/* ============================ turn flow ============================ */
+function human(a) { if (humanTurn()) act(a); }
+async function act(a, openedSlice = null) {
+  const before = pos, p = pos.toMove, n = apply(pos, a);
+  if (!n) { if (openedSlice) await closeSlice(openedSlice, null); return; }
+  busy = true; setHover(null); previewSlice = false; render();
+  if (a.t === "drop") await animateDrop(p, a.x, a.y, height(before.b, a.x, a.y));
+  else await closeSlice(openedSlice || openSlice(a.axis, a.k), a);
+  history.push({ pos: before, a, p });
+  pos = n; busy = false;
+  if (!pos.result && children(pos).length === 0) pos = { ...pos, result: { winner: null, line: null, reason: "no_legal_actions" } };
+  if (pos.result && pos.result.line) showWin(pos.result.line);
+  render(); maybeComputer();
+}
+
+const levelFor = (p) => settings.mode === "watch" ? (p === 1 ? settings.wx : settings.wo) : settings.level;
+function maybeComputer() {
+  clearTimeout(aiTimer);
+  if (pos.result) return;
+  if (!(settings.mode === "watch" || (settings.mode === "cpu" && pos.toMove !== settings.human))) return;
+  busy = true; render();
+  aiTimer = setTimeout(() => {
+    const lvl = levelFor(pos.toMove);
+    const a = lvl === "easy" ? greedyMove(pos) : searchMove(pos, lvl === "hard" ? 3 : 2);
+    busy = false; act(a);
+  }, settings.mode === "watch" ? 700 : 420);
+}
+function newGame() {
+  if (settings.mode === "replay") { if (replay.events) replayRestart(); return; }
+  clearTimeout(aiTimer); busy = false; falling.splice(0).forEach((f) => f.res()); tweens.splice(0).forEach((t) => { t.step(1); t.res(); });
+  clearWin(); pos = newPos(); history = []; rebuild(); updateGhost(); render(); maybeComputer();
+}
+function undo() {
+  if (falling.length || tweens.length || settings.mode === "watch" || settings.mode === "replay") return;
+  clearTimeout(aiTimer); busy = false; clearWin();
+  const back = () => { const h = history.pop(); if (!h) return false; pos = h.pos; return true; };
+  back();
+  while (settings.mode === "cpu" && history.length && pos.toMove !== settings.human) back();
+  rebuild(); updateGhost(); render(); maybeComputer();
+}
+document.getElementById("newGame").onclick = newGame;
+document.getElementById("undo").onclick = undo;
+
+/* ---- twist picker ---- */
+const indexSeg = document.getElementById("indexSeg");
+function buildIndexSeg() {
+  const labels = picker.axis === "layer" ? ["1 · bottom", "2", "3", "4 · top"] : picker.axis === "col" ? ["A", "B", "C", "D"] : ["1 · front", "2", "3", "4 · back"];
+  indexSeg.innerHTML = labels.map((l, k) => `<button type="button" data-v="${k}" aria-pressed="${k === picker.k}">${l}</button>`).join("");
+}
+document.getElementById("axisSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  picker.axis = b.dataset.v; buildIndexSeg(); syncSegs(); render(); showPreview(true);
+});
+indexSeg.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; picker.k = +b.dataset.v; render(); showPreview(true); });
+const DIR_UI = {
+  layer: [["↻", "Clockwise", "seen from above"], ["↺", "Counter-clockwise", "seen from above"]],
+  col: [["⤵", "Tip forward", "top rolls toward row 1"], ["⤴", "Tip back", "top rolls toward row 4"]],
+  row: [["↶", "Tip left", "top rolls toward A"], ["↷", "Tip right", "top rolls toward D"]],
+};
+const dirBtns = [document.getElementById("dirA"), document.getElementById("dirB")];
+dirBtns.forEach((b, j) => {
+  b.onclick = () => human({ t: "twist", axis: picker.axis, k: picker.k, dir: DIRS[picker.axis][j] });
+  b.onmouseenter = b.onfocus = () => showPreview(true);
+});
+const twistCard = document.getElementById("twistCard");
+twistCard.addEventListener("mouseenter", () => showPreview(true));
+twistCard.addEventListener("mouseleave", () => showPreview(false));
+twistCard.addEventListener("focusout", (e) => { if (!twistCard.contains(e.relatedTarget)) showPreview(false); });
+function showPreview(on) {
+  previewSlice = on && !busy;
+  if (previewSlice && !gesture) { tintSlice("--slice"); placeSliceBox(picker.axis, picker.k); sliceBox.visible = true; } else if (!busy && !gesture) sliceBox.visible = false;
+  renderLayers();
+}
+
+/* ---- settings ---- */
+function bindSeg(id, key, cast = (v) => v) {
+  document.getElementById(id).addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    settings[key] = cast(b.dataset.v); syncSegs();
+    if (key === "level" || key === "wx" || key === "wo") { render(); maybeComputer(); }
+    else if (key === "mode" && settings.mode === "replay") { stopReplay(); clearTimeout(aiTimer); busy = false; if (replay.events) replayRestart(); else { clearWin(); pos = newPos(); history = []; rebuild(); render(); } }
+    else { stopReplay(); newGame(); }
+  });
+}
+function syncSegs() {
+  for (const [id, key] of [["modeSeg", "mode"], ["levelSeg", "level"], ["sideSeg", "human"], ["wxSeg", "wx"], ["woSeg", "wo"]])
+    for (const b of document.getElementById(id).querySelectorAll("button")) b.setAttribute("aria-pressed", String(String(settings[key]) === b.dataset.v));
+  for (const b of document.getElementById("axisSeg").querySelectorAll("button")) b.setAttribute("aria-pressed", String(picker.axis === b.dataset.v));
+  document.getElementById("levelRow").hidden = settings.mode !== "cpu";
+  document.getElementById("sideRow").hidden = settings.mode !== "cpu";
+  document.getElementById("watchRow").hidden = settings.mode !== "watch";
+  document.getElementById("replayCard").hidden = settings.mode !== "replay";
+  document.getElementById("twistCard").hidden = settings.mode === "watch" || settings.mode === "replay";
+  hintEl.textContent = settings.mode === "replay" ? "Replaying a recorded game · drag to look around · scroll or pinch to zoom"
+    : settings.mode === "watch" ? "Computer vs computer · drag to look around · scroll or pinch to zoom" : HINT;
+}
+bindSeg("modeSeg", "mode"); bindSeg("levelSeg", "level"); bindSeg("sideSeg", "human", Number); bindSeg("wxSeg", "wx"); bindSeg("woSeg", "wo");
+
+/* ============================ replay a trace from the Python runner ============================
+   The trace is one JSON event per line: start (players, opening), illegal / call_failed, move (player, source, action, raw), end. */
+const SAMPLE_TRACE = "{\"type\": \"start\", \"case\": \"T1-empty\", \"seed\": 2074324692, \"opening\": [], \"players\": {\"1\": \"minimax\", \"2\": \"greedy\"}, \"limits\": {\"step_limit\": 100, \"call_limit\": 110, \"call_timeout_s\": 60.0, \"episode_timeout_s\": 1800.0, \"max_attempts_per_turn\": 2}, \"game_version\": \"unknown\", \"run\": \"sample\", \"date\": \"2026-11-08T22:21:06-05:00\", \"candidate\": \"minimax\", \"opponent\": \"greedy\", \"minimax_depth\": 3, \"model\": null, \"history\": \"none\", \"max_output_tokens\": null}\n{\"type\": \"move\", \"n\": 1, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop D1\", \"placed\": [3, 0, 0], \"search_value\": 11, \"nodes\": 2835}\n{\"type\": \"move\", \"n\": 2, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop D3\", \"placed\": [3, 2, 0]}\n{\"type\": \"move\", \"n\": 3, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop A4\", \"placed\": [0, 3, 0], \"search_value\": 16, \"nodes\": 2582}\n{\"type\": \"move\", \"n\": 4, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop C1\", \"placed\": [2, 0, 0]}\n{\"type\": \"move\", \"n\": 5, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop D4\", \"placed\": [3, 3, 0], \"search_value\": 44, \"nodes\": 2578}\n{\"type\": \"move\", \"n\": 6, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop C3\", \"placed\": [2, 2, 0]}\n{\"type\": \"move\", \"n\": 7, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop B3\", \"placed\": [1, 2, 0], \"search_value\": 50, \"nodes\": 2625}\n{\"type\": \"move\", \"n\": 8, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop C2\", \"placed\": [2, 1, 0]}\n{\"type\": \"move\", \"n\": 9, \"player\": 1, \"source\": \"baseline\", \"action\": \"drop C4\", \"placed\": [2, 3, 0], \"search_value\": 57, \"nodes\": 4587}\n{\"type\": \"move\", \"n\": 10, \"player\": 2, \"source\": \"baseline\", \"action\": \"drop B4\", \"placed\": [1, 3, 0]}\n{\"type\": \"move\", \"n\": 11, \"player\": 1, \"source\": \"baseline\", \"action\": \"twist col B fwd\", \"placed\": null, \"search_value\": 100003, \"nodes\": 6743}\n{\"type\": \"end\", \"outcome\": {\"status\": \"terminal\", \"reason\": \"connect_four\", \"winner\": 1, \"score\": {\"1\": 1, \"2\": -1}}, \"winning_line\": [\"A4 L1\", \"B4 L1\", \"C4 L1\", \"D4 L1\"], \"steps\": 11, \"wall_s\": 0.73, \"players\": {\"1\": {\"name\": \"minimax\", \"moves\": 6, \"fallback_moves\": 0, \"calls\": 0, \"failed_calls\": 0, \"illegal_attempts\": 0, \"input_tokens\": 0, \"output_tokens\": 0, \"latencies\": null, \"mean_latency_s\": 0.121}, \"2\": {\"name\": \"greedy\", \"moves\": 5, \"fallback_moves\": 0, \"calls\": 0, \"failed_calls\": 0, \"illegal_attempts\": 0, \"input_tokens\": 0, \"output_tokens\": 0, \"latencies\": null, \"mean_latency_s\": 0.0}}}";
+const replay = { events: null, names: {}, opening: [], moves: [], end: null, i: 0, playing: false, timer: null, delay: 1400, file: "" };
+function parseActionText(s) {
+  const m = String(s || "").trim().toLowerCase().split(/\s+/);
+  if (m[0] === "drop" && m.length === 2 && m[1].length === 2) {
+    const x = COLS.indexOf(m[1][0].toUpperCase()), y = +m[1][1] - 1;
+    if (x >= 0 && y >= 0 && y < N) return { t: "drop", x, y };
+  }
+  if (m[0] === "twist" && m.length === 4 && DIRS[m[1]] && DIRS[m[1]].includes(m[3])) {
+    const k = m[1] === "col" ? COLS.indexOf(m[2].toUpperCase()) : +m[2] - 1;
+    if (k >= 0 && k < N) return { t: "twist", axis: m[1], k, dir: m[3] };
+  }
+  return null;
+}
+function friendly(name) {
+  if (!name) return "?";
+  if (name.startsWith("model:")) {
+    const [, model, hist, ver] = name.split(":");
+    return `Gemini (${model}${ver ? ", prompt " + ver : ""}${hist && hist !== "none" ? ", with history" : ""})`;
+  }
+  return { minimax: "Minimax baseline", greedy: "Greedy", random: "Random", human: "Human" }[name] || name;
+}
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+function loadTrace(text, fname) {
+  const err = document.getElementById("rpError"); err.textContent = "";
+  let events;
+  try { events = text.split(/\r?\n/).filter((l) => l.trim()).map((l) => JSON.parse(l)); }
+  catch (e) { err.textContent = "That file is not a trace: each line must be one JSON event."; return; }
+  const start = events.find((e) => e.type === "start");
+  if (!start) { err.textContent = "No start event found. Pick a .jsonl trace from results/ or traces/."; return; }
+  const moves = []; let pending = [];
+  for (const e of events) {
+    if (e.type === "illegal" || e.type === "call_failed" || e.type === "limit" || e.type === "error") pending.push(e);
+    else if (e.type === "move") { moves.push({ ...e, before: pending }); pending = []; }
+  }
+  stopReplay();
+  Object.assign(replay, { events, names: start.players || {}, opening: start.opening || [], moves, end: events.find((e) => e.type === "end") || null, i: 0, file: fname, start });
+  settings.mode = "replay"; syncSegs();
+  document.getElementById("rpBody").hidden = false;
+  replayRestart();
+}
+function replayRestart() {
+  stopReplay(); clearTimeout(aiTimer); busy = false; falling.splice(0).forEach((f) => f.res()); tweens.splice(0).forEach((t) => { t.step(1); t.res(); });
+  clearWin(); pos = newPos(); history = [];
+  for (const t of replay.opening) {
+    const a = parseActionText(t), n = a && apply(pos, a);
+    if (!n) { document.getElementById("rpError").textContent = `Opening action "${t}" is not legal here; the trace may be from an older version of the game.`; break; }
+    history.push({ pos, a, p: pos.toMove }); pos = n;
+  }
+  replay.i = 0; rebuild(); updateGhost(); render(); renderReplay(null);
+}
+function stopReplay() { replay.playing = false; clearTimeout(replay.timer); const b = document.getElementById("rpPlay"); if (b) b.textContent = "Play"; }
+async function replayStep() {
+  if (busy || falling.length || tweens.length) return;
+  if (replay.i >= replay.moves.length) { stopReplay(); renderReplay(replay.moves[replay.i - 1] || null); return; }
+  const ev = replay.moves[replay.i], a = parseActionText(ev.action);
+  if (!a || ev.player !== pos.toMove || !apply(pos, a)) {
+    document.getElementById("rpError").textContent = `Move ${replay.i + 1} ("${ev.action}" by ${sym(ev.player)}) does not fit this board; the trace may be from an older version of the game.`;
+    stopReplay(); return;
+  }
+  replay.i++; renderReplay(ev);
+  await act(a);
+  renderReplay(ev);
+  if (replay.playing) replay.timer = setTimeout(replayStep, replay.delay);
+}
+function renderReplay(ev) {
+  if (!replay.events) return;
+  const s = replay.start, n = replay.moves.length;
+  const meta = [["File", `<code>${esc(replay.file)}</code>`], ["X (red)", esc(friendly(replay.names["1"]))], ["O (yellow)", esc(friendly(replay.names["2"]))]];
+  if (s.case) meta.push(["Case", esc(s.case) + (s.seed !== undefined ? ` · seed ${esc(s.seed)}` : "")]);
+  if (replay.opening.length) meta.push(["Opening", `${replay.opening.length} actions from the suite, applied first`]);
+  meta.push(["Progress", `move ${replay.i} of ${n}`]);
+  if (replay.i >= n && replay.end) {
+    const o = replay.end.outcome || {};
+    meta.push(["Result", esc(`${o.winner ? sym(+o.winner) + " won" : "no winner"} · ${o.reason || "?"}`)]);
+  }
+  document.getElementById("rpMeta").innerHTML = meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  const now = document.getElementById("rpNow"), raw = document.getElementById("rpRaw");
+  if (!ev) { now.innerHTML = n ? "Press Play or Step." : "This trace has no moves."; raw.hidden = true; return; }
+  const who = friendly(replay.names[String(ev.player)]);
+  const srcText = ev.source === "model" ? "chosen by the model" : ev.source === "fallback" ? "fallback: substituted by the runner, not a model move" : "chosen by the baseline";
+  const rej = ev.before.map((b) => b.type === "illegal" ? `rejected: ${esc(b.action ? b.action + ": " : "")}${esc(b.reason)}` : b.type === "call_failed" ? `failed call: ${esc(b.error)}` : esc(`${b.type}: ${b.reason || b.error || ""}`));
+  const facts = [ev.latency_s != null ? `${ev.latency_s}s` : "", ev.output_tokens != null ? `${ev.input_tokens}+${ev.output_tokens} tokens` : ""].filter(Boolean).join(" · ");
+  now.innerHTML = `<span class="src ${esc(ev.source)}">${srcText}</span><div><b>${sym(ev.player)} · ${esc(who)}</b>: ${esc(ev.action)}${facts ? ` <span style="color:var(--muted)">(${facts})</span>` : ""}</div>` +
+    rej.map((r) => `<div class="rej">${r}</div>`).join("");
+  if (ev.raw) { raw.hidden = false; raw.textContent = ev.raw; raw.scrollTop = raw.scrollHeight; } else raw.hidden = true;
+}
+document.getElementById("traceFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  loadTrace(await f.text(), f.name); e.target.value = "";
+});
+document.getElementById("sampleTrace").onclick = () => loadTrace(SAMPLE_TRACE, "sample: minimax vs greedy, T1-empty (results/sample)");
+document.getElementById("rpPlay").onclick = () => {
+  if (replay.playing) { stopReplay(); return; }
+  if (replay.i >= replay.moves.length) replayRestart();
+  replay.playing = true; document.getElementById("rpPlay").textContent = "Pause"; replayStep();
+};
+document.getElementById("rpStep").onclick = () => { stopReplay(); replayStep(); };
+document.getElementById("rpRestart").onclick = () => replayRestart();
+document.getElementById("rpSpeed").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return; replay.delay = +b.dataset.v;
+  for (const x of document.getElementById("rpSpeed").querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+});
+stage.addEventListener("dragover", (e) => { e.preventDefault(); });
+stage.addEventListener("drop", async (e) => {
+  e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return;
+  loadTrace(await f.text(), f.name);
+});
+
+/* ============================ panel ============================ */
+const layersEl = document.getElementById("layers");
+for (let z = N - 1; z >= 0; z--) {
+  const wrap = document.createElement("div"); wrap.className = "layer";
+  wrap.innerHTML = `<h3>Layer ${z + 1}${z === 0 ? " · bottom" : z === N - 1 ? " · top" : ""}</h3>`;
+  const g = document.createElement("div"); g.className = "grid";
+  for (let y = N - 1; y >= 0; y--) {
+    const ax = document.createElement("span"); ax.className = "ax"; ax.textContent = y + 1; g.append(ax);
+    for (let x = 0; x < N; x++) {
+      const c = document.createElement("button"); c.type = "button"; c.className = "cell"; c.dataset.i = idx(x, y, z);
+      c.addEventListener("click", () => human({ t: "drop", x, y }));
+      c.addEventListener("mouseenter", () => setHover({ x, y })); c.addEventListener("mouseleave", () => setHover(null));
+      c.addEventListener("focus", () => setHover({ x, y })); c.addEventListener("blur", () => setHover(null));
+      g.append(c);
+    }
+  }
+  g.append(document.createElement("span"));
+  for (let x = 0; x < N; x++) { const ax = document.createElement("span"); ax.className = "ax"; ax.textContent = COLS[x]; g.append(ax); }
+  wrap.append(g); layersEl.append(wrap);
+}
+const cells = [...layersEl.querySelectorAll(".cell")];
+function renderLayers() {
+  const gz = hover && humanTurn() ? height(pos.b, hover.x, hover.y) : -1;
+  const ghostCell = hover && gz >= 0 && gz < N ? idx(hover.x, hover.y, gz) : -1;
+  for (const c of cells) {
+    const i = +c.dataset.i, v = pos.b[i], [x, y, z] = xyz(i);
+    c.className = "cell" + (v === 1 ? " x" : v === 2 ? " o" : "")
+      + (hover && hover.x === x && hover.y === y && !v ? " shaft" : "")
+      + (i === ghostCell ? (pos.toMove === 1 ? " ghost-x" : " ghost-o") : "")
+      + (previewSlice && inSlice(x, y, z, picker) ? " inslice" : "")
+      + (winCells.includes(i) ? " win" : "");
+    c.setAttribute("aria-label", `Drop in shaft ${shaftName(x, y)} (layer ${z + 1}: ${v ? sym(v) : "empty"})`);
+  }
+}
+function render() {
+  const disc = document.getElementById("statusDisc"), main = document.getElementById("statusMain"), sub = document.getElementById("statusSub");
+  const who = (p) => settings.mode === "pvp" ? `Player ${sym(p)}` : settings.mode === "watch" ? `Computer (${levelFor(p)})`
+    : settings.mode === "replay" ? friendly(replay.names[String(p)]) : p === settings.human ? "You" : "Computer";
+  const r = pos.result, lastH = history[history.length - 1];
+  if (r && r.winner) {
+    disc.className = "disc " + (r.winner === 1 ? "x" : "o"); main.textContent = `${sym(r.winner)} wins`;
+    const byOppTwist = lastH && lastH.a.t === "twist" && lastH.p !== r.winner;
+    sub.textContent = `${who(r.winner)} · ${byOppTwist ? "the opponent's twist made the line · " : ""}${r.line.map(cellName).join(" → ")}`;
+  } else if (r) {
+    disc.className = "disc none"; main.textContent = "Draw"; sub.textContent = r.reason === "no_legal_actions" ? `${sym(pos.toMove)} has no legal move.` : `No line after ${TURN_LIMIT} turns.`;
+  } else {
+    disc.className = "disc " + (pos.toMove === 1 ? "x" : "o"); main.textContent = `${sym(pos.toMove)} to move`;
+    const cpu = settings.mode === "cpu" && pos.toMove !== settings.human;
+    sub.textContent = settings.mode === "replay" ? (replay.events ? `Replay · ${who(pos.toMove)} to move` : "Load a trace file to replay a game")
+      : settings.mode === "watch" ? `${who(pos.toMove)} is thinking…`
+      : cpu ? `Computer (${settings.level}) is thinking…` : settings.mode === "pvp" ? `Player ${sym(pos.toMove)}: drop or twist` : "Your turn: drop a piece or twist a slice";
+  }
+  document.getElementById("turnBadge").textContent = r ? `Game over · ${history.length} turns` : `Turn ${pos.turn} / ${TURN_LIMIT}`;
+  // twist picker
+  for (const b of indexSeg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(+b.dataset.v === picker.k));
+  const can = humanTurn(); let why = "";
+  DIR_UI[picker.axis].forEach(([g, name, note], j) => {
+    document.getElementById(j ? "glyphB" : "glyphA").textContent = g;
+    document.getElementById(j ? "nameB" : "nameA").textContent = name;
+    document.getElementById(j ? "noteB" : "noteA").textContent = note;
+    const block = twistBlock(pos, { axis: picker.axis, k: picker.k, dir: DIRS[picker.axis][j] });
+    dirBtns[j].disabled = !can || !!block;
+    dirBtns[j].title = block || `Twist ${sliceName(picker.axis, picker.k)} ${DIR_WORD[DIRS[picker.axis][j]]}`;
+    if (block && can) why = `${name}: ${block}`;
+  });
+  document.getElementById("why").textContent = can ? why : "";
+  const list = document.getElementById("moves");
+  list.innerHTML = history.map((h, k) => `<li><span class="n">${k + 1}.</span><span class="dot ${h.p === 1 ? "x" : "o"}"></span>${sym(h.p)} ${describe(h.a)}</li>`).join("");
+  list.scrollTop = list.scrollHeight;
+  document.getElementById("movesEmpty").hidden = history.length > 0;
+  document.getElementById("undo").disabled = history.length === 0 || settings.mode === "watch" || settings.mode === "replay";
+  renderLayers();
+}
+
+/* ============================ start ============================ */
+function start(data = {}) {
+  if (data.settings) Object.assign(settings, data.settings);
+  buildIndexSeg(); syncSegs(); resize(); applyTheme();
+  for (const a of data.actions || []) { const n = apply(pos, a); if (!n) break; history.push({ pos, a, p: pos.toMove }); pos = n; }
+  rebuild(); if (pos.result && pos.result.line) showWin(pos.result.line);
+  render(); requestAnimationFrame(frame); maybeComputer();
+}
+window.claude?.hot?.snapshot?.(() => ({ settings: { ...settings }, actions: history.map((h) => h.a) }));
+window.__twist = { apply, twistBoard, turnCell, settle, children, searchMove, greedyMove, twistBlock, LINES, idx, xyz,
+  get pos() { return pos; }, meshes: () => meshes, act, settings, newGame, newPos, loadTrace, replay, replayStep,
+  project: (x, y, z, dx = 0, dy = 0, dz = 0) => toScreen(cellPos(x, y, z).add(new V3(dx, dy, dz))), camX: () => camera.position.x };
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
+</body>
+</html>
